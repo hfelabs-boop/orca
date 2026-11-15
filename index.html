@@ -137,7 +137,7 @@ button.sm{padding:.25rem .6rem;font-size:.78rem}
 <body>
 <div id="start" class="veil">
   <div class="card">
-    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD</h1>
+    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 5 · VR buttons</small></h1>
     <p class="lede">The light is going. Walk to overwatch, use two drones to see ahead, change sensors as it gets dark, and mark every hostile in the village before they see you. Hidden bombs (IEDs) lie on the roads and trails. Then walk out.</p>
     <div class="row">
       <button id="btnVR" disabled>Enter VR</button>
@@ -2489,7 +2489,7 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
   briefPanel = new T.Mesh(new T.PlaneGeometry(1.9, 1.07), new T.MeshBasicMaterial({ map: t, transparent: true })); briefPanel.position.set(0, 1.78, -1.95); briefGrp.add(briefPanel);
   const draw = () => { const x = c.getContext('2d'); x.clearRect(0, 0, 960, 540); x.fillStyle = 'rgba(8,30,38,.9)'; x.fillRect(0, 0, 960, 540);
     x.fillStyle = '#ffb81f'; x.fillRect(0, 0, 8, 540); x.fillStyle = '#e6f1f2'; x.textBaseline = 'alphabetic';
-    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96);
+    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 5', 300, 96);
     x.font = `400 31px ${FONT}`; x.fillStyle = '#cfe0e2';
     const lines = ['1.  Follow the white route north to Overwatch.', '2.  MagniTude sweeps the village, Magni-X flies ahead.', '     Fuse both feeds to see everything they see.',
       '3.  Aim at a hostile and press Mark. Never mark cyan.', '4.  IEDs (hidden bombs) lie on roads and trails.', '     Keep 2 m away. Sensors and drones show them.', '5.  Stay out of their sight, then walk to Exfil.'];
