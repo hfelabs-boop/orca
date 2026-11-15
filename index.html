@@ -137,7 +137,7 @@ button.sm{padding:.25rem .6rem;font-size:.78rem}
 <body>
 <div id="start" class="veil">
   <div class="card">
-    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 7 · VR buttons</small></h1>
+    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 8 · VR buttons</small></h1>
     <p class="lede">The light is going. Walk to overwatch, use two drones to see ahead, change sensors as it gets dark, and mark every hostile in the village before they see you. Hidden bombs (IEDs) lie on the roads and trails. Then walk out.</p>
     <div class="row">
       <button id="btnVR" disabled>Enter VR</button>
@@ -2492,7 +2492,7 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
   briefPanel = new T.Mesh(new T.PlaneGeometry(1.9, 1.07), new T.MeshBasicMaterial({ map: t, transparent: true })); briefPanel.position.set(0, 1.78, -1.95); briefGrp.add(briefPanel);
   const draw = () => { const x = c.getContext('2d'); x.clearRect(0, 0, 960, 540); x.fillStyle = 'rgba(8,30,38,.9)'; x.fillRect(0, 0, 960, 540);
     x.fillStyle = '#ffb81f'; x.fillRect(0, 0, 8, 540); x.fillStyle = '#e6f1f2'; x.textBaseline = 'alphabetic';
-    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 7', 300, 96);
+    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 8', 300, 96);
     x.font = `400 31px ${FONT}`; x.fillStyle = '#cfe0e2';
     const lines = ['1.  Follow the white route north to Overwatch.', '2.  MagniTude sweeps the village, Magni-X flies ahead.', '     Fuse both feeds to see everything they see.',
       '3.  Aim at a hostile and press Mark. Never mark cyan.', '4.  IEDs (hidden bombs) lie on roads and trails.', '     Keep 2 m away. Sensors and drones show them.', '5.  Stay out of their sight, then walk to Exfil.'];
@@ -2559,6 +2559,22 @@ function updateCommanders(dt, t) {
 
 const HD = 1.2, hud = new T.Group(); camera.add(hud);
 let TAPE = 70;   // half the span of the heading tape in degrees: narrower in the headset so it fits the field of view
+/* EagleEye simulation in the headset (Meta Quest 3: 110 x 96 degrees). Published figures: the day module is see-through AR glasses
+   with about a 70 degree diagonal display (aspect assumed 16:10), the night module is digital night vision with an 84 degree field of view.
+   In the day (Visible) sensor the world fills the Quest view and the symbols stay inside the 70 degree display;
+   in Low light, Thermal and Fused the world is seen only through the 84 degree night-vision aperture. */
+const EE = { arDiag: 70, arW: 16, arH: 10, nvFov: 84 };
+const eeMask = (() => {   // black outside the 84 degree circle, soft edge, one metre in front of the eyes
+  const N = 1024, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'), S = 6, r = Math.tan(EE.nvFov / 2 * DEG) / S * N;
+  x.fillStyle = '#000'; x.fillRect(0, 0, N, N); x.globalCompositeOperation = 'destination-out';
+  const g = x.createRadialGradient(N / 2, N / 2, r * 0.94, N / 2, N / 2, r); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.beginPath(); x.arc(N / 2, N / 2, r, 0, 7); x.fill();
+  const t = new T.CanvasTexture(c), m = new T.Mesh(new T.PlaneGeometry(S, S), new T.MeshBasicMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false }));
+  m.position.z = -1; m.renderOrder = 19; m.frustumCulled = false; m.visible = false; camera.add(m); return m;
+})();
+const eeFrame = (() => {   // faint corner marks at the edge of the 70 degree AR display
+  const m = new T.LineSegments(new T.BufferGeometry(), new T.LineBasicMaterial({ color: 0x8fe3ff, transparent: true, opacity: 0.35, depthTest: false, depthWrite: false }));
+  m.renderOrder = 20; m.frustumCulled = false; m.visible = false; hud.add(m); return m;
+})();
 const unit = new T.PlaneGeometry(1, 1);
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; const tex = new T.CanvasTexture(c); tex.minFilter = T.LinearFilter; tex.generateMipmaps = false; return { c, ctx: c.getContext('2d'), tex, w, h }; }
 function hudMesh(tex, parent = hud) { const m = new T.Mesh(unit, new T.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false })); m.renderOrder = 20; m.frustumCulled = false; parent.add(m); return m; }
@@ -2621,15 +2637,17 @@ let lastArc = -1;
 function setArc(f) { const q = Math.round(f * 40); if (q === lastArc) return; lastArc = q; markArc.geometry.dispose(); markArc.geometry = new T.RingGeometry(0.063, 0.071, 48, 1, Math.PI / 2, -Math.PI * 2 * Math.max(f, 0.0001)); markArc.visible = f > 0.01; }
 function layoutHUD() {
   let hh, hw;
-  if (inXR) { hh = 0.4; hw = 0.6; } else { hh = HD * Math.tan(camera.fov * DEG / 2); hw = hh * camera.aspect; }
-  const sc = inXR ? 0.46 : Math.min(hh, hw * 0.72); TAPE = inXR ? 35 : 70;
+  if (inXR) { const td = Math.tan(EE.arDiag / 2 * DEG) / Math.hypot(EE.arW, EE.arH); hw = HD * td * EE.arW; hh = HD * td * EE.arH; } else { hh = HD * Math.tan(camera.fov * DEG / 2); hw = hh * camera.aspect; }
+  const sc = inXR ? 0.46 : Math.min(hh, hw * 0.72); TAPE = inXR ? Math.round(Math.atan(hw / HD) / DEG) - 2 : 70;
   mapMesh.scale.set(0.62 * sc, 0.62 * sc, 1); mapMesh.position.set(-hw + 0.4 * sc, -hh + 0.38 * sc, -HD); mapMesh.rotation.set(-0.42, 0.22, 0);
   const pad = (isTouch && !inXR) ? 2 * hw * Math.min(0.36, 150 / window.innerWidth) : 0, tall = isTouch && !inXR && camera.aspect < 1;
   dronePanel.scale.setScalar(0.56 * sc); dronePanel.position.set(hw - 0.37 * sc - pad, -hh + 0.31 * sc, -HD); dronePanel.rotation.set(0, -0.3, 0);
   if (tall) { dronePanel.position.set(-hw + 0.36 * sc, -hh + 1.08 * sc, -HD); dronePanel.rotation.set(0, 0.22, 0); }
   if (inXR) {   // headset: a tactical HMD frame, everything inside the central field of view and clear of the hands and the weapon below
-    mapMesh.position.set(-hw + 0.36 * sc, -0.09, -HD); mapMesh.rotation.set(-0.12, 0.3, 0);
-    dronePanel.position.set(hw - 0.33 * sc, -0.07, -HD); dronePanel.rotation.set(0, -0.3, 0);
+    mapMesh.position.set(-hw + 0.36 * sc, -0.15, -HD); mapMesh.rotation.set(-0.12, 0.3, 0);
+    dronePanel.position.set(hw - 0.33 * sc, -0.13, -HD); dronePanel.rotation.set(0, -0.3, 0);
+    const a = 0.07, p = []; for (const [sx, sy] of [[-1, 1], [1, 1], [1, -1], [-1, -1]]) { const x = sx * hw, y = sy * hh; p.push(x, y, -HD, x - sx * a, y, -HD, x, y, -HD, x, y - sy * a, -HD); }
+    eeFrame.geometry.dispose(); eeFrame.geometry = new T.BufferGeometry(); eeFrame.geometry.setAttribute('position', new T.Float32BufferAttribute(p, 3));
   }   // upright phone: the feed sits above the minimap, clear of the buttons
   statMesh.scale.set(1.16 * sc, 1.16 * sc * 110 / 640, 1); statMesh.position.set(0, hh - 0.44 * sc, -HD);
   radMesh.scale.set(0.7 * sc, 0.7 * sc, 1); radMesh.position.set(0, 0, -HD);
@@ -3441,6 +3459,7 @@ function loop(ms) {
   LOG.tick(dt);
   wantRear = wantMode = wantDrone = wantFeed = wantConfirm = wantCtrl = wantZoom = wantLaunch = wantLaunchAll = wantRecall = false;
   updateGloves(dt, t);
+  eeMask.visible = inXR && state === 'field' && mode !== 0 && !ctrl; eeFrame.visible = inXR && state === 'field' && !ctrl;
   rearGrp.visible = state === 'field' && rearA > 0.02 && !ctrl; rearMesh.material.opacity = 0.95 * rearA; rearLine.material.opacity = 0.9 * rearA; if (state === 'field') statMesh.position.y = lerp(statY0, statY1, rearGrp.visible ? rearA : 0);
   if (dbgCam) hud.visible = false;
   if (dbgCam) selfShow(true);
