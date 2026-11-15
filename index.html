@@ -137,7 +137,7 @@ button.sm{padding:.25rem .6rem;font-size:.78rem}
 <body>
 <div id="start" class="veil">
   <div class="card">
-    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 6 · VR buttons</small></h1>
+    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 7 · VR buttons</small></h1>
     <p class="lede">The light is going. Walk to overwatch, use two drones to see ahead, change sensors as it gets dark, and mark every hostile in the village before they see you. Hidden bombs (IEDs) lie on the roads and trails. Then walk out.</p>
     <div class="row">
       <button id="btnVR" disabled>Enter VR</button>
@@ -2492,7 +2492,7 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
   briefPanel = new T.Mesh(new T.PlaneGeometry(1.9, 1.07), new T.MeshBasicMaterial({ map: t, transparent: true })); briefPanel.position.set(0, 1.78, -1.95); briefGrp.add(briefPanel);
   const draw = () => { const x = c.getContext('2d'); x.clearRect(0, 0, 960, 540); x.fillStyle = 'rgba(8,30,38,.9)'; x.fillRect(0, 0, 960, 540);
     x.fillStyle = '#ffb81f'; x.fillRect(0, 0, 8, 540); x.fillStyle = '#e6f1f2'; x.textBaseline = 'alphabetic';
-    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 6', 300, 96);
+    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 7', 300, 96);
     x.font = `400 31px ${FONT}`; x.fillStyle = '#cfe0e2';
     const lines = ['1.  Follow the white route north to Overwatch.', '2.  MagniTude sweeps the village, Magni-X flies ahead.', '     Fuse both feeds to see everything they see.',
       '3.  Aim at a hostile and press Mark. Never mark cyan.', '4.  IEDs (hidden bombs) lie on roads and trails.', '     Keep 2 m away. Sensors and drones show them.', '5.  Stay out of their sight, then walk to Exfil.'];
@@ -2558,6 +2558,7 @@ function updateCommanders(dt, t) {
 }
 
 const HD = 1.2, hud = new T.Group(); camera.add(hud);
+let TAPE = 70;   // half the span of the heading tape in degrees: narrower in the headset so it fits the field of view
 const unit = new T.PlaneGeometry(1, 1);
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; const tex = new T.CanvasTexture(c); tex.minFilter = T.LinearFilter; tex.generateMipmaps = false; return { c, ctx: c.getContext('2d'), tex, w, h }; }
 function hudMesh(tex, parent = hud) { const m = new T.Mesh(unit, new T.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false })); m.renderOrder = 20; m.frustumCulled = false; parent.add(m); return m; }
@@ -2620,12 +2621,16 @@ let lastArc = -1;
 function setArc(f) { const q = Math.round(f * 40); if (q === lastArc) return; lastArc = q; markArc.geometry.dispose(); markArc.geometry = new T.RingGeometry(0.063, 0.071, 48, 1, Math.PI / 2, -Math.PI * 2 * Math.max(f, 0.0001)); markArc.visible = f > 0.01; }
 function layoutHUD() {
   let hh, hw;
-  if (inXR) { hh = 0.42; hw = 0.55; } else { hh = HD * Math.tan(camera.fov * DEG / 2); hw = hh * camera.aspect; }
-  const sc = Math.min(hh, hw * 0.72);
+  if (inXR) { hh = 0.4; hw = 0.6; } else { hh = HD * Math.tan(camera.fov * DEG / 2); hw = hh * camera.aspect; }
+  const sc = inXR ? 0.46 : Math.min(hh, hw * 0.72); TAPE = inXR ? 35 : 70;
   mapMesh.scale.set(0.62 * sc, 0.62 * sc, 1); mapMesh.position.set(-hw + 0.4 * sc, -hh + 0.38 * sc, -HD); mapMesh.rotation.set(-0.42, 0.22, 0);
   const pad = (isTouch && !inXR) ? 2 * hw * Math.min(0.36, 150 / window.innerWidth) : 0, tall = isTouch && !inXR && camera.aspect < 1;
   dronePanel.scale.setScalar(0.56 * sc); dronePanel.position.set(hw - 0.37 * sc - pad, -hh + 0.31 * sc, -HD); dronePanel.rotation.set(0, -0.3, 0);
-  if (tall) { dronePanel.position.set(-hw + 0.36 * sc, -hh + 1.08 * sc, -HD); dronePanel.rotation.set(0, 0.22, 0); }   // upright phone: the feed sits above the minimap, clear of the buttons
+  if (tall) { dronePanel.position.set(-hw + 0.36 * sc, -hh + 1.08 * sc, -HD); dronePanel.rotation.set(0, 0.22, 0); }
+  if (inXR) {   // headset: a tactical HMD frame, everything inside the central field of view and clear of the hands and the weapon below
+    mapMesh.position.set(-hw + 0.36 * sc, -0.09, -HD); mapMesh.rotation.set(-0.12, 0.3, 0);
+    dronePanel.position.set(hw - 0.33 * sc, -0.07, -HD); dronePanel.rotation.set(0, -0.3, 0);
+  }   // upright phone: the feed sits above the minimap, clear of the buttons
   statMesh.scale.set(1.16 * sc, 1.16 * sc * 110 / 640, 1); statMesh.position.set(0, hh - 0.44 * sc, -HD);
   radMesh.scale.set(0.7 * sc, 0.7 * sc, 1); radMesh.position.set(0, 0, -HD);
   const ew = Math.min(1.7 * sc, 1.85 * hw); endMesh.scale.set(ew, ew * 400 / 720, 1); endMesh.position.set(0, 0, -HD + 0.01);
@@ -2634,7 +2639,7 @@ function layoutHUD() {
   // heading tape: a ring at constant elevation, so a marker sits directly above the thing it points to
   const el = Math.atan((hh - (inXR ? 0.13 : 0.2) * sc) / HD), dl = Math.atan(0.075 * sc / HD), N = 64, pos = [], uv = [], idx = [];
   for (let i = 0; i <= N; i++) {
-    const a = (-70 + 140 * i / N) * DEG;
+    const a = (-TAPE + 2 * TAPE * i / N) * DEG;
     for (const s of [1, -1]) { const e = el + s * dl; pos.push(HD * Math.cos(e) * Math.sin(a), HD * Math.sin(e), -HD * Math.cos(e) * Math.cos(a)); uv.push(i / N, s > 0 ? 1 : 0); }
     if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
   }
@@ -3302,13 +3307,13 @@ function drawMap() {
   mapC.tex.needsUpdate = true;
 }
 function drawTape() {
-  const c = tapeC.ctx, W = 1024, ppd = W / 140; c.clearRect(0, 0, W, 64);
+  const c = tapeC.ctx, W = 1024, ppd = W / (2 * TAPE); c.clearRect(0, 0, W, 64);
   c.fillStyle = mode === 0 ? 'rgba(214,224,232,.3)' : 'rgba(120,130,138,.42)'; c.fillRect(0, 8, W, 22);
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  for (let d = 0; d < 360; d += 15) { const rel = wrap180(d - P.hdg); if (Math.abs(rel) > 70) continue; const x = W / 2 + rel * ppd;
+  for (let d = 0; d < 360; d += 15) { const rel = wrap180(d - P.hdg); if (Math.abs(rel) > TAPE) continue; const x = W / 2 + rel * ppd;
     if (d % 90 === 0) { c.fillStyle = 'rgba(8,16,20,.8)'; c.fillRect(x - 13, 5, 26, 28); c.fillStyle = '#fff'; c.font = `600 22px ${FONT}`; c.fillText('NESW'[d / 90], x, 20); }
     else { c.fillStyle = 'rgba(255,255,255,.55)'; c.fillRect(x - 1, 14, 2, 10); } }
-  const put = (kind, x, z) => { const rel = wrap180(brg(x, z) - P.hdg); if (Math.abs(rel) < 69) glyph(c, kind, W / 2 + rel * ppd, 19, 8); };
+  const put = (kind, x, z) => { const rel = wrap180(brg(x, z) - P.hdg); if (Math.abs(rel) < TAPE - 1) glyph(c, kind, W / 2 + rel * ppd, 19, 8); };
   const w = wp(); if (w) put('wp', w.x, w.z); for (const e of ents) if (e.tracked && augOn(e, 1)) put(e.kind, e.x, e.z); if (cfg.aug.drone[1]) for (const d of fleet) if (!d.micro || d.fp > 0) put('friendly', d.px, d.pz); if (cfg.aug.ied[1]) for (const i of ieds) if (i.detected && !i.exploded) put('ied', i.x, i.z);
   c.fillStyle = '#fff'; c.fillRect(W / 2 - 1, 32, 2, 7); c.font = `500 17px ${FONT}`; c.fillText(Math.round(P.hdg) % 360 + '°', W / 2, 52);
   tapeC.tex.needsUpdate = true;
