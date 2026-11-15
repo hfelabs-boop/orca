@@ -137,7 +137,7 @@ button.sm{padding:.25rem .6rem;font-size:.78rem}
 <body>
 <div id="start" class="veil">
   <div class="card">
-    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 8 · VR buttons</small></h1>
+    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 10 · VR buttons</small></h1>
     <p class="lede">The light is going. Walk to overwatch, use two drones to see ahead, change sensors as it gets dark, and mark every hostile in the village before they see you. Hidden bombs (IEDs) lie on the roads and trails. Then walk out.</p>
     <div class="row">
       <button id="btnVR" disabled>Enter VR</button>
@@ -2352,7 +2352,9 @@ function textSprite(text, scale, color = '#e6f1f2') {
     const w = x.measureText(text).width + 28; x.fillStyle = 'rgba(40,48,54,.78)'; x.fillRect(160 - w / 2, 8, w, 48); x.fillStyle = color; x.fillText(text, 160, 33); t.needsUpdate = true; };
   draw(); sprites.push(draw); return s;
 }
-let briefPanel, tableUpdate, deployBtn, planBar, planDraw = () => {};
+let HS = 0.8; try { const v = parseFloat(localStorage.getItem('orca.hudScale')); if (v >= 0.4 && v <= 1.2) HS = v; } catch (e) { /* default size */ }   // HUD size in the headset, set with the HUD - / + buttons in the briefing room
+let briefPanel, tableUpdate, deployBtn, planBar, hudBtns = [], planDraw = () => {};
+function hudSize(d) { HS = Math.round(clamp(HS + d, 0.4, 1.2) * 20) / 20; try { localStorage.setItem('orca.hudScale', String(HS)); } catch (e) { /* not saved */ } layoutHUD(); sprites.forEach(f => f()); beep(d > 0 ? 880 : 600, 0.04); LOG.ev('system', 'hud_scale', { to: HS }); }
 /* route planning on the table: waypoints for each ground robot, sent as orders when you deploy */
 const PLAN = { sel: 0, cool: 0, msg: '', msgT: 0, bots: [{ name: 'BLR Mk2', short: 'BLR', col: '#ffb81f', c: [1, 0.72, 0.12] }, { name: 'Robot dog', short: 'Dog', col: '#5cf0a8', c: [0.36, 0.94, 0.66] }, { name: 'Rover 8×8', short: 'Rover', col: '#c49cff', c: [0.77, 0.61, 1] }], pts: [[], [], []] };
 try { const s = JSON.parse(localStorage.getItem('nightjar.plan') || 'null'); if (Array.isArray(s) && s.length === 3 && s.every(Array.isArray)) PLAN.pts = s; } catch (e) { /* storage may be unavailable */ }
@@ -2487,17 +2489,26 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
         x.fillStyle = bot && on ? '#04141b' : '#e6f1f2'; x.font = `600 34px ${FONT}`; x.fillText(t, bx + 70, bot ? 46 : 56); if (bot) { x.font = `500 22px ${FONT}`; x.fillText(PLAN.pts[i].length + ' pts', bx + 70, 80); } });
       x.textAlign = 'left'; x.fillStyle = '#cfe0e2'; x.font = `400 23px ${FONT}`; const m = planMsgNow(true), w = m.split(' '); let l1 = '', l2 = ''; for (const s of w) { if (!l2 && x.measureText(l1 + s).width < 740) l1 += s + ' '; else l2 += s + ' '; } x.fillText(l1, 14, 132); x.fillText(l2, 14, 168); pt.needsUpdate = true; };
     sprites.push(() => planBar.userData.draw()); }
+  { // HUD size in the headset: two buttons under Deploy, with the frame shown while you set it
+    const mk = (label, x) => { const cc = document.createElement('canvas'); cc.width = 192; cc.height = 96; const tt = new T.CanvasTexture(cc); tt.minFilter = T.LinearFilter; tt.generateMipmaps = false;
+      const m = new T.Mesh(new T.PlaneGeometry(0.15, 0.075), new T.MeshBasicMaterial({ map: tt })); m.position.set(x, base + 0.37, 1.15); m.rotation.set(-0.35, 0, 0); m.visible = false; briefGrp.add(m);
+      const d = () => { const q = cc.getContext('2d'); q.fillStyle = '#0d2a33'; q.fillRect(0, 0, 192, 96); q.strokeStyle = '#8fe3ff'; q.lineWidth = 4; q.strokeRect(2, 2, 188, 92); q.fillStyle = '#e6f1f2'; q.font = `600 34px ${FONT}`; q.textAlign = 'center'; q.textBaseline = 'middle';
+        q.fillText(label === '+' ? 'HUD +' : 'HUD −', 96, 36); q.font = `500 22px ${FONT}`; q.fillStyle = '#8fe3ff'; q.fillText(Math.round(HS * 100) + '%', 96, 72); tt.needsUpdate = true; };
+      d(); sprites.push(d); return m; };
+    hudBtns = [mk('-', 0.53), mk('+', 0.71)];
+  }
   // wall panel
   const c = document.createElement('canvas'); c.width = 960; c.height = 540; const t = new T.CanvasTexture(c); t.minFilter = T.LinearFilter; t.generateMipmaps = false;
   briefPanel = new T.Mesh(new T.PlaneGeometry(1.9, 1.07), new T.MeshBasicMaterial({ map: t, transparent: true })); briefPanel.position.set(0, 1.78, -1.95); briefGrp.add(briefPanel);
   const draw = () => { const x = c.getContext('2d'); x.clearRect(0, 0, 960, 540); x.fillStyle = 'rgba(8,30,38,.9)'; x.fillRect(0, 0, 960, 540);
     x.fillStyle = '#ffb81f'; x.fillRect(0, 0, 8, 540); x.fillStyle = '#e6f1f2'; x.textBaseline = 'alphabetic';
-    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 8', 300, 96);
+    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 10', 300, 96);
     x.font = `400 31px ${FONT}`; x.fillStyle = '#cfe0e2';
     const lines = ['1.  Follow the white route north to Overwatch.', '2.  MagniTude sweeps the village, Magni-X flies ahead.', '     Fuse both feeds to see everything they see.',
       '3.  Aim at a hostile and press Mark. Never mark cyan.', '4.  IEDs (hidden bombs) lie on roads and trails.', '     Keep 2 m away. Sensors and drones show them.', '5.  Stay out of their sight, then walk to Exfil.'];
     lines.forEach((l, i) => x.fillText(l, 48, 160 + i * 42));
     x.font = `400 24px ${FONT}`; x.fillStyle = '#9db8bc'; x.fillText(inXR ? 'Plan: trigger at the map, or touch it, to add a waypoint. Pinch and drag to move it.' : isTouch ? 'Plan robot routes: pick a robot, tap the map. Drag to turn, pinch to zoom.' : 'Plan robot routes: pick a robot, click the map. Drag to turn, scroll to zoom.', 48, 462);
+    if (inXR && XRF.done) { x.fillStyle = '#7fd6e0'; x.font = `500 20px ${FONT}`; x.fillText(`Headset view (both eyes): left ${Math.round(-XRF.L)}°  right ${Math.round(XRF.R)}°  up ${Math.round(XRF.U)}°  down ${Math.round(-XRF.D)}°`, 48, 432); }
     if (xrErr) { x.fillStyle = '#ff6b6b'; x.font = `600 22px ${FONT}`; x.fillText('Error: ' + xrErr, 48, 462); }
     x.fillStyle = '#ffb81f'; x.font = `600 34px ${FONT}`; x.fillText(inXR ? 'Press A to deploy, or point at Deploy and pull the trigger' : 'Press Deploy, or Enter, to begin', 48, 510); t.needsUpdate = true; };
   draw(); sprites.push(draw);
@@ -2564,6 +2575,18 @@ let TAPE = 70;   // half the span of the heading tape in degrees: narrower in th
    In the day (Visible) sensor the world fills the Quest view and the symbols stay inside the 70 degree display;
    in Low light, Thermal and Fused the world is seen only through the 84 degree night-vision aperture. */
 const EE = { arDiag: 70, arW: 16, arH: 10, nvFov: 84 };
+/* what this headset really shows: read from both eye projections once the session renders, then the HUD is fitted to the part both eyes see */
+const XRF = { done: false, L: 0, R: 0, U: 0, D: 0 };
+function xrFitCheck() {
+  if (!inXR || XRF.done) return; const cams = renderer.xr.getCamera(camera).cameras; if (!cams || cams.length < 1) return;
+  let L = -9, R = 9, U = 9, D = -9;
+  for (const c of cams) { const e = c.projectionMatrix.elements; if (!e[0] || !e[5]) return;
+    R = Math.min(R, (1 + e[8]) / e[0]); L = Math.max(L, (e[8] - 1) / e[0]); U = Math.min(U, (1 + e[9]) / e[5]); D = Math.max(D, (e[9] - 1) / e[5]); }
+  if (!(R > 0.2 && -L > 0.2 && U > 0.2 && -D > 0.2)) return;
+  Object.assign(XRF, { done: true, L: -Math.atan(-L) / DEG, R: Math.atan(R) / DEG, U: Math.atan(U) / DEG, D: -Math.atan(-D) / DEG, tw: Math.min(R, -L), th: Math.min(U, -D) });
+  LOG.ev('system', 'xr_fov', { left: Math.round(XRF.L), right: Math.round(XRF.R), up: Math.round(XRF.U), down: Math.round(XRF.D), eyes: cams.length });
+  layoutHUD(); sprites.forEach(f => f());
+}
 const eeMask = (() => {   // black outside the 84 degree circle, soft edge, one metre in front of the eyes
   const N = 1024, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'), S = 6, r = Math.tan(EE.nvFov / 2 * DEG) / S * N;
   x.fillStyle = '#000'; x.fillRect(0, 0, N, N); x.globalCompositeOperation = 'destination-out';
@@ -2572,7 +2595,7 @@ const eeMask = (() => {   // black outside the 84 degree circle, soft edge, one 
   m.position.z = -1; m.renderOrder = 19; m.frustumCulled = false; m.visible = false; camera.add(m); return m;
 })();
 const eeFrame = (() => {   // faint corner marks at the edge of the 70 degree AR display
-  const m = new T.LineSegments(new T.BufferGeometry(), new T.LineBasicMaterial({ color: 0x8fe3ff, transparent: true, opacity: 0.35, depthTest: false, depthWrite: false }));
+  const m = new T.LineSegments(new T.BufferGeometry(), new T.LineBasicMaterial({ color: 0x8fe3ff, transparent: true, opacity: 0.6, depthTest: false, depthWrite: false }));
   m.renderOrder = 20; m.frustumCulled = false; m.visible = false; hud.add(m); return m;
 })();
 const unit = new T.PlaneGeometry(1, 1);
@@ -2637,8 +2660,9 @@ let lastArc = -1;
 function setArc(f) { const q = Math.round(f * 40); if (q === lastArc) return; lastArc = q; markArc.geometry.dispose(); markArc.geometry = new T.RingGeometry(0.063, 0.071, 48, 1, Math.PI / 2, -Math.PI * 2 * Math.max(f, 0.0001)); markArc.visible = f > 0.01; }
 function layoutHUD() {
   let hh, hw;
-  if (inXR) { const td = Math.tan(EE.arDiag / 2 * DEG) / Math.hypot(EE.arW, EE.arH); hw = HD * td * EE.arW; hh = HD * td * EE.arH; } else { hh = HD * Math.tan(camera.fov * DEG / 2); hw = hh * camera.aspect; }
-  const sc = inXR ? 0.46 : Math.min(hh, hw * 0.72); TAPE = inXR ? Math.round(Math.atan(hw / HD) / DEG) - 2 : 70;
+  if (inXR) { const td = Math.tan(EE.arDiag / 2 * DEG) / Math.hypot(EE.arW, EE.arH); hw = HD * td * EE.arW; hh = HD * td * EE.arH;
+    if (XRF.done) { hw = Math.min(hw, HD * XRF.tw * 0.72); hh = Math.min(hh, HD * XRF.th * 0.72); } hw *= HS; hh *= HS; } else { hh = HD * Math.tan(camera.fov * DEG / 2); hw = hh * camera.aspect; }
+  const sc = inXR ? 0.46 * Math.min(1, HS + 0.15) : Math.min(hh, hw * 0.72); TAPE = inXR ? Math.round(Math.atan(hw / HD) / DEG) - 2 : 70;
   mapMesh.scale.set(0.62 * sc, 0.62 * sc, 1); mapMesh.position.set(-hw + 0.4 * sc, -hh + 0.38 * sc, -HD); mapMesh.rotation.set(-0.42, 0.22, 0);
   const pad = (isTouch && !inXR) ? 2 * hw * Math.min(0.36, 150 / window.innerWidth) : 0, tall = isTouch && !inXR && camera.aspect < 1;
   dronePanel.scale.setScalar(0.56 * sc); dronePanel.position.set(hw - 0.37 * sc - pad, -hh + 0.31 * sc, -HD); dronePanel.rotation.set(0, -0.3, 0);
@@ -2725,7 +2749,7 @@ function setState(s) {
   const was = state;
   if (s === 'brief' && state !== 'brief') { tableReset(); TBL.zoom = 1; tableUpdate(); }
   if (s !== 'field' && document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
-  state = s; if (s !== 'field') wxOff(); const brief = s === 'menu' || s === 'brief'; deployBtn.visible = inXR && s === 'brief'; U.uSun.value.copy(brief ? SUN_ROOM : SUN_FIELD); if (s !== 'field') U.uShOn.value = 0; if (brief) U.uSunC.value.set(0.98, 0.93, 0.86); else U.uSunC.value.set(1.0, 0.60, 0.34);
+  state = s; if (s !== 'field') wxOff(); const brief = s === 'menu' || s === 'brief'; deployBtn.visible = inXR && s === 'brief'; hudBtns.forEach(b => b.visible = inXR && s === 'brief'); U.uSun.value.copy(brief ? SUN_ROOM : SUN_FIELD); if (s !== 'field') U.uShOn.value = 0; if (brief) U.uSunC.value.set(0.98, 0.93, 0.86); else U.uSunC.value.set(1.0, 0.60, 0.34);
   world.visible = !brief; sky.visible = !brief; briefGrp.visible = brief;
   fieldHud.forEach(m => m.visible = !brief); if (brief) markArc.visible = false;
   mapMesh.visible = !brief && cfg.hudMap; tapeMesh.visible = !brief && cfg.hudStrip; if (s !== 'field') ctrl = null; $('btnCtrl').hidden = $('btnRear').hidden = inXR || s !== 'field'; rearLabel(); syncCtrlUi(); $('btnGear').hidden = inXR || s === 'menu';
@@ -2937,6 +2961,7 @@ function xrTrig(c) { // a trigger in the briefing room: a plan button, Deploy, o
   planRayFrom(c); const hb = _rc.intersectObject(planBar, false)[0], bi = hb ? planBarUV(hb.uv) : -1;   // the bar only catches the ray where a button is, so the map behind it stays pointable
   if (bi >= 0) { planButton(bi); return; }
   if (_rc.intersectObject(deployBtn, false)[0]) { wantConfirm = true; return; }
+  for (let i = 0; i < hudBtns.length; i++) if (_rc.intersectObject(hudBtns[i], false)[0]) { hudSize(i ? 0.05 : -0.05); return; }
   const g = planHit(_rc); if (g) { planAdd(g[0], g[1]); return; }
   wantConfirm = true;
 }
@@ -3050,6 +3075,7 @@ function briefInput(dt) {
       bPinch = { n: 2, d, a, x: mx, z: mz }; }
     else if (ph.length === 1) { if (bPinch && bPinch.n === 1 && bPinch.h === ph[0]) panTable(q[0].x - bPinch.x, q[0].z - bPinch.z); bPinch = { n: 1, h: ph[0], x: q[0].x, z: q[0].z }; }
     else bPinch = null;
+    for (let i = 0; i < hudBtns.length; i++) { hudBtns[i].getWorldPosition(tV); for (const h of hands) if (h.seen && h.p['index-finger-tip'] && bPoke <= 0 && h.p['index-finger-tip'].distanceTo(tV) < 0.05) { bPoke = 0.6; hudSize(i ? 0.05 : -0.05); } }
     bPoke -= dt; deployBtn.getWorldPosition(tV); for (const h of hands) if (h.seen && h.p['index-finger-tip'] && bPoke <= 0 && h.p['index-finger-tip'].distanceTo(tV) < 0.12) { bPoke = 1.5; wantConfirm = true; }
   }
   planXRFrame(dt);
@@ -3449,7 +3475,7 @@ function loop(ms) {
   } else {
     if (state === 'menu' && inXR && !menuFix) { menuFix = true; try { resetGame(); } catch (e) { xrErr = 'starting the briefing: ' + String(e && e.message || e).slice(0, 70); sprites.forEach(f => f()); } }   // in the headset the menu must give way to the briefing, or the plan buttons and Deploy never show
     if (state === 'menu') { yaw = Math.sin(t * 0.12) * 0.35; TBL.rot += dt * 0.05; tableUpdate(); }
-    if (state === 'brief') briefInput(dt);
+    xrFitCheck(); if (state === 'brief') briefInput(dt);
     updateCommanders(dt, t);
     if (state === 'debrief' && inXR) { const pn = hands.some(h => h.seen && h.pinch); if (pn && !prevPn) wantConfirm = true; prevPn = pn; }
     updateHead();
@@ -3459,7 +3485,7 @@ function loop(ms) {
   LOG.tick(dt);
   wantRear = wantMode = wantDrone = wantFeed = wantConfirm = wantCtrl = wantZoom = wantLaunch = wantLaunchAll = wantRecall = false;
   updateGloves(dt, t);
-  eeMask.visible = inXR && state === 'field' && mode !== 0 && !ctrl; eeFrame.visible = inXR && state === 'field' && !ctrl;
+  xrFitCheck(); eeMask.visible = inXR && state === 'field' && mode !== 0 && !ctrl; eeFrame.visible = inXR && !ctrl && (state === 'field' || state === 'brief');
   rearGrp.visible = state === 'field' && rearA > 0.02 && !ctrl; rearMesh.material.opacity = 0.95 * rearA; rearLine.material.opacity = 0.9 * rearA; if (state === 'field') statMesh.position.y = lerp(statY0, statY1, rearGrp.visible ? rearA : 0);
   if (dbgCam) hud.visible = false;
   if (dbgCam) selfShow(true);
@@ -3471,7 +3497,7 @@ function loop(ms) {
 function resize() { if (inXR) return; camera.aspect = window.innerWidth / window.innerHeight; camera.fov = camera.aspect < 1 ? 92 : 70; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); layoutHUD(); attachTool(); }
 addEventListener('resize', resize);
 renderer.xr.addEventListener('sessionstart', () => { inXR = true; if (LOG.S) LOG.S.xr = true; LOG.ev('system', 'headset_on', { hands: !!(renderer.xr.getSession() && renderer.xr.getSession().inputSources.some(s => s.hand)) }); applyQuality(); camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0); pitch = 0; attachTool(); layoutHUD(); setState(state); sprites.forEach(f => f()); if (result) drawEnd(); });
-renderer.xr.addEventListener('sessionend', () => { inXR = false; menuFix = false; LOG.ev('system', 'headset_off'); if (state === 'debrief' && LOG.S && LOG.S.A) setTimeout(() => showReport(LOG.S), 300); applyQuality(); rightCtrl = null; attachTool(); camera.position.set(0, EYE, 0); resize(); setState(state); sprites.forEach(f => f()); if (state === 'menu') $('start').hidden = false; });
+renderer.xr.addEventListener('sessionend', () => { inXR = false; menuFix = false; XRF.done = false; LOG.ev('system', 'headset_off'); if (state === 'debrief' && LOG.S && LOG.S.A) setTimeout(() => showReport(LOG.S), 300); applyQuality(); rightCtrl = null; attachTool(); camera.position.set(0, EYE, 0); resize(); setState(state); sprites.forEach(f => f()); if (state === 'menu') $('start').hidden = false; });
 cv.addEventListener('click', () => { if (state === 'debrief') wantConfirm = true; });
 
 if (isTouch) $('touchNote').hidden = false;
