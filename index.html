@@ -2477,7 +2477,7 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
     deployBtn = new T.Mesh(new T.PlaneGeometry(0.24, 0.09), new T.MeshBasicMaterial({ map: dt2 })); deployBtn.position.set(0.5, base + 0.13, 1.3); deployBtn.rotation.set(-0.7, 0, 0); deployBtn.visible = false; briefGrp.add(deployBtn);
     sprites.push(() => { const x = dc.getContext('2d'); x.fillStyle = '#ffb81f'; x.fillRect(0, 0, 256, 96); x.fillStyle = '#04141b'; x.font = `600 44px ${FONT}`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('Deploy', 128, 50); dt2.needsUpdate = true; }); sprites[sprites.length - 1](); }
   { const pc = document.createElement('canvas'); pc.width = 768; pc.height = 200; const pt = new T.CanvasTexture(pc); pt.minFilter = T.LinearFilter; pt.generateMipmaps = false;   // robot buttons and Undo / Clear, to touch or point at
-    planBar = new T.Mesh(new T.PlaneGeometry(0.64, 0.64 * 200 / 768), new T.MeshBasicMaterial({ map: pt, transparent: true })); planBar.position.set(-0.06, base + 0.13, 1.3); planBar.rotation.set(-0.7, 0, 0); planBar.visible = false; briefGrp.add(planBar);
+    planBar = new T.Mesh(new T.PlaneGeometry(0.64, 0.64 * 200 / 768), new T.MeshBasicMaterial({ map: pt, transparent: true })); planBar.position.set(-0.06, base + 0.05, 1.3); planBar.rotation.set(-1.0, 0, 0); planBar.visible = false; briefGrp.add(planBar);
     planBar.userData.draw = () => { const x = pc.getContext('2d'); x.clearRect(0, 0, 768, 200); x.fillStyle = 'rgba(8,30,38,.88)'; x.fillRect(0, 0, 768, 200); x.textAlign = 'center'; x.textBaseline = 'middle';
       ['BLR', 'Dog', 'Rover', 'Undo', 'Clear'].forEach((t, i) => { const bx = 10 + i * 151, bot = PLAN.bots[i], on = i === PLAN.sel;
         x.fillStyle = bot ? (on ? bot.col : 'rgba(255,255,255,.1)') : 'rgba(255,255,255,.1)'; x.fillRect(bx, 10, 141, 92); if (bot && !on) { x.strokeStyle = bot.col; x.lineWidth = 4; x.strokeRect(bx + 2, 12, 137, 88); }
@@ -2907,8 +2907,8 @@ function planBarUV(uv) { if (!uv) return -1; const px = uv.x * 768, py = (1 - uv
 function planButton(i) { if (i < 3) planSel(i); else if (i === 3) planUndo(); else planClear(); }
 function xrTrig(c) { // a trigger in the briefing room: a plan button, Deploy, or a waypoint on the map
   if (state !== 'brief' || !c || !c.userData.pad) { wantConfirm = true; return; }
-  planRayFrom(c); const hb = _rc.intersectObject(planBar, false)[0];
-  if (hb) { const b = planBarUV(hb.uv); if (b >= 0) planButton(b); return; }
+  planRayFrom(c); const hb = _rc.intersectObject(planBar, false)[0], bi = hb ? planBarUV(hb.uv) : -1;   // the bar only catches the ray where a button is, so the map behind it stays pointable
+  if (bi >= 0) { planButton(bi); return; }
   if (_rc.intersectObject(deployBtn, false)[0]) { wantConfirm = true; return; }
   const g = planHit(_rc); if (g) { planAdd(g[0], g[1]); return; }
   wantConfirm = true;
@@ -2918,7 +2918,7 @@ function planXRFrame(dt) {
   if (wantDrone) planSel((PLAN.sel + 1) % 3); if (wantCtrl) planUndo();
   for (const c of [leftCtrl, rightCtrl]) { // the pointing ray stops where it meets the table or a button
     if (!c || !c.userData.ray) continue; const ln = c.userData.ray; ln.visible = !!c.userData.pad; if (!ln.visible) continue;
-    planRayFrom(c); const hb = _rc.intersectObject(planBar, false)[0] || _rc.intersectObject(deployBtn, false)[0], hr = !hb && TBL.relief ? _rc.intersectObject(TBL.relief, false)[0] : null;
+    planRayFrom(c); const pb = _rc.intersectObject(planBar, false)[0], hb = (pb && planBarUV(pb.uv) >= 0 ? pb : null) || _rc.intersectObject(deployBtn, false)[0], hr = !hb && TBL.relief ? _rc.intersectObject(TBL.relief, false)[0] : null;
     ln.scale.z = hb ? hb.distance : hr ? hr.distance : 1.5;
   }
   if (PLAN.cool > 0 || hands.some(h => h.seen && h.pinch)) return;
