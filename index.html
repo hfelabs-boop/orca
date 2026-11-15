@@ -137,7 +137,7 @@ button.sm{padding:.25rem .6rem;font-size:.78rem}
 <body>
 <div id="start" class="veil">
   <div class="card">
-    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 5 · VR buttons</small></h1>
+    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 6 · VR buttons</small></h1>
     <p class="lede">The light is going. Walk to overwatch, use two drones to see ahead, change sensors as it gets dark, and mark every hostile in the village before they see you. Hidden bombs (IEDs) lie on the roads and trails. Then walk out.</p>
     <div class="row">
       <button id="btnVR" disabled>Enter VR</button>
@@ -2341,6 +2341,9 @@ function attachTool() {
 
 /* ───────────── briefing room with terrain table ───────────── */
 const briefGrp = new T.Group(); scene.add(briefGrp);
+let xrErr = '', menuFix = false;   // the last script error, shown on the briefing panel so it can be read inside the headset
+addEventListener('error', e => { xrErr = String((e && (e.message || (e.error && e.error.message))) || 'unknown error').slice(0, 90); try { sprites.forEach(f => f()); } catch (_) { /* panel not built yet */ } });
+addEventListener('unhandledrejection', e => { xrErr = String((e && e.reason && (e.reason.message || e.reason)) || 'unknown error').slice(0, 90); try { sprites.forEach(f => f()); } catch (_) { /* panel not built yet */ } });
 const sprites = [];
 function textSprite(text, scale, color = '#e6f1f2') {
   const c = document.createElement('canvas'); c.width = 320; c.height = 64; const t = new T.CanvasTexture(c); t.minFilter = T.LinearFilter; t.generateMipmaps = false;
@@ -2489,12 +2492,13 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
   briefPanel = new T.Mesh(new T.PlaneGeometry(1.9, 1.07), new T.MeshBasicMaterial({ map: t, transparent: true })); briefPanel.position.set(0, 1.78, -1.95); briefGrp.add(briefPanel);
   const draw = () => { const x = c.getContext('2d'); x.clearRect(0, 0, 960, 540); x.fillStyle = 'rgba(8,30,38,.9)'; x.fillRect(0, 0, 960, 540);
     x.fillStyle = '#ffb81f'; x.fillRect(0, 0, 8, 540); x.fillStyle = '#e6f1f2'; x.textBaseline = 'alphabetic';
-    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 5', 300, 96);
+    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 6', 300, 96);
     x.font = `400 31px ${FONT}`; x.fillStyle = '#cfe0e2';
     const lines = ['1.  Follow the white route north to Overwatch.', '2.  MagniTude sweeps the village, Magni-X flies ahead.', '     Fuse both feeds to see everything they see.',
       '3.  Aim at a hostile and press Mark. Never mark cyan.', '4.  IEDs (hidden bombs) lie on roads and trails.', '     Keep 2 m away. Sensors and drones show them.', '5.  Stay out of their sight, then walk to Exfil.'];
     lines.forEach((l, i) => x.fillText(l, 48, 160 + i * 42));
     x.font = `400 24px ${FONT}`; x.fillStyle = '#9db8bc'; x.fillText(inXR ? 'Plan: trigger at the map, or touch it, to add a waypoint. Pinch and drag to move it.' : isTouch ? 'Plan robot routes: pick a robot, tap the map. Drag to turn, pinch to zoom.' : 'Plan robot routes: pick a robot, click the map. Drag to turn, scroll to zoom.', 48, 462);
+    if (xrErr) { x.fillStyle = '#ff6b6b'; x.font = `600 22px ${FONT}`; x.fillText('Error: ' + xrErr, 48, 462); }
     x.fillStyle = '#ffb81f'; x.font = `600 34px ${FONT}`; x.fillText(inXR ? 'Press A to deploy, or point at Deploy and pull the trigger' : 'Press Deploy, or Enter, to begin', 48, 510); t.needsUpdate = true; };
   draw(); sprites.push(draw);
 }
@@ -3420,6 +3424,7 @@ function loop(ms) {
       if (rearA > 0.02 && (frame + 1) % (inXR ? Math.max(4, feedEvery) : Math.max(2, feedEvery - 1)) === 0) renderRear();
     }
   } else {
+    if (state === 'menu' && inXR && !menuFix) { menuFix = true; try { resetGame(); } catch (e) { xrErr = 'starting the briefing: ' + String(e && e.message || e).slice(0, 70); sprites.forEach(f => f()); } }   // in the headset the menu must give way to the briefing, or the plan buttons and Deploy never show
     if (state === 'menu') { yaw = Math.sin(t * 0.12) * 0.35; TBL.rot += dt * 0.05; tableUpdate(); }
     if (state === 'brief') briefInput(dt);
     updateCommanders(dt, t);
@@ -3442,7 +3447,7 @@ function loop(ms) {
 function resize() { if (inXR) return; camera.aspect = window.innerWidth / window.innerHeight; camera.fov = camera.aspect < 1 ? 92 : 70; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); layoutHUD(); attachTool(); }
 addEventListener('resize', resize);
 renderer.xr.addEventListener('sessionstart', () => { inXR = true; if (LOG.S) LOG.S.xr = true; LOG.ev('system', 'headset_on', { hands: !!(renderer.xr.getSession() && renderer.xr.getSession().inputSources.some(s => s.hand)) }); applyQuality(); camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0); pitch = 0; attachTool(); layoutHUD(); setState(state); sprites.forEach(f => f()); if (result) drawEnd(); });
-renderer.xr.addEventListener('sessionend', () => { inXR = false; LOG.ev('system', 'headset_off'); if (state === 'debrief' && LOG.S && LOG.S.A) setTimeout(() => showReport(LOG.S), 300); applyQuality(); rightCtrl = null; attachTool(); camera.position.set(0, EYE, 0); resize(); setState(state); sprites.forEach(f => f()); if (state === 'menu') $('start').hidden = false; });
+renderer.xr.addEventListener('sessionend', () => { inXR = false; menuFix = false; LOG.ev('system', 'headset_off'); if (state === 'debrief' && LOG.S && LOG.S.A) setTimeout(() => showReport(LOG.S), 300); applyQuality(); rightCtrl = null; attachTool(); camera.position.set(0, EYE, 0); resize(); setState(state); sprites.forEach(f => f()); if (state === 'menu') $('start').hidden = false; });
 cv.addEventListener('click', () => { if (state === 'debrief') wantConfirm = true; });
 
 if (isTouch) $('touchNote').hidden = false;
