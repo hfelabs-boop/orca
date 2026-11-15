@@ -2474,7 +2474,7 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
   const floor = new T.Mesh(new T.CircleGeometry(9, 48), new T.MeshBasicMaterial({ color: 0x15191c })); floor.rotation.x = -Math.PI / 2; briefGrp.add(floor);
   const wall = new T.Mesh(new T.CylinderGeometry(9, 9, 6, 48, 1, true), new T.MeshBasicMaterial({ color: 0x2a3036, side: T.BackSide })); wall.position.y = 3; briefGrp.add(wall);
   { const dc = document.createElement('canvas'); dc.width = 256; dc.height = 96; const dt2 = new T.CanvasTexture(dc); dt2.minFilter = T.LinearFilter; dt2.generateMipmaps = false;   // a button to touch with a finger when using hand tracking
-    deployBtn = new T.Mesh(new T.PlaneGeometry(0.24, 0.09), new T.MeshBasicMaterial({ map: dt2 })); deployBtn.position.set(0.5, base + 0.13, 1.3); deployBtn.rotation.set(-0.7, 0, 0); deployBtn.visible = false; briefGrp.add(deployBtn);
+    deployBtn = new T.Mesh(new T.PlaneGeometry(0.42, 0.158), new T.MeshBasicMaterial({ map: dt2 })); deployBtn.position.set(0.62, base + 0.2, 1.15); deployBtn.rotation.set(-0.5, 0, 0); deployBtn.visible = false; briefGrp.add(deployBtn);
     sprites.push(() => { const x = dc.getContext('2d'); x.fillStyle = '#ffb81f'; x.fillRect(0, 0, 256, 96); x.fillStyle = '#04141b'; x.font = `600 44px ${FONT}`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('Deploy', 128, 50); dt2.needsUpdate = true; }); sprites[sprites.length - 1](); }
   { const pc = document.createElement('canvas'); pc.width = 768; pc.height = 200; const pt = new T.CanvasTexture(pc); pt.minFilter = T.LinearFilter; pt.generateMipmaps = false;   // robot buttons and Undo / Clear, to touch or point at
     planBar = new T.Mesh(new T.PlaneGeometry(0.64, 0.64 * 200 / 768), new T.MeshBasicMaterial({ map: pt, transparent: true })); planBar.position.set(-0.06, base + 0.05, 1.3); planBar.rotation.set(-1.0, 0, 0); planBar.visible = false; briefGrp.add(planBar);
@@ -2495,7 +2495,7 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
       '3.  Aim at a hostile and press Mark. Never mark cyan.', '4.  IEDs (hidden bombs) lie on roads and trails.', '     Keep 2 m away. Sensors and drones show them.', '5.  Stay out of their sight, then walk to Exfil.'];
     lines.forEach((l, i) => x.fillText(l, 48, 160 + i * 42));
     x.font = `400 24px ${FONT}`; x.fillStyle = '#9db8bc'; x.fillText(inXR ? 'Plan: trigger at the map, or touch it, to add a waypoint. Pinch and drag to move it.' : isTouch ? 'Plan robot routes: pick a robot, tap the map. Drag to turn, pinch to zoom.' : 'Plan robot routes: pick a robot, click the map. Drag to turn, scroll to zoom.', 48, 462);
-    x.fillStyle = '#ffb81f'; x.font = `600 34px ${FONT}`; x.fillText(inXR ? 'Pull the right trigger, or touch the Deploy button' : 'Press Deploy, or Enter, to begin', 48, 510); t.needsUpdate = true; };
+    x.fillStyle = '#ffb81f'; x.font = `600 34px ${FONT}`; x.fillText(inXR ? 'Press A to deploy, or point at Deploy and pull the trigger' : 'Press Deploy, or Enter, to begin', 48, 510); t.needsUpdate = true; };
   draw(); sprites.push(draw);
 }
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { sprites.forEach(f => f()); ents.forEach(e => { const t = e.labelText; e.labelText = ''; setLabel(e, t); }); drawRadial(); });
@@ -3023,7 +3023,7 @@ function briefInput(dt) {
       bPinch = { n: 2, d, a, x: mx, z: mz }; }
     else if (ph.length === 1) { if (bPinch && bPinch.n === 1 && bPinch.h === ph[0]) panTable(q[0].x - bPinch.x, q[0].z - bPinch.z); bPinch = { n: 1, h: ph[0], x: q[0].x, z: q[0].z }; }
     else bPinch = null;
-    bPoke -= dt; deployBtn.getWorldPosition(tV); for (const h of hands) if (h.seen && h.p['index-finger-tip'] && bPoke <= 0 && h.p['index-finger-tip'].distanceTo(tV) < 0.075) { bPoke = 1.5; wantConfirm = true; }
+    bPoke -= dt; deployBtn.getWorldPosition(tV); for (const h of hands) if (h.seen && h.p['index-finger-tip'] && bPoke <= 0 && h.p['index-finger-tip'].distanceTo(tV) < 0.12) { bPoke = 1.5; wantConfirm = true; }
   }
   planXRFrame(dt);
   if (Math.abs(TBL.tz - TBL.zoom) > 0.002) { TBL.zoom += (TBL.tz - TBL.zoom) * Math.min(1, dt * 9); TBL.dirty = true; }
@@ -3051,6 +3051,7 @@ function readInput(dt) {
     if ((now.rDrone && !prevBtn.rDrone) || (now.lDrone && !prevBtn.lDrone)) wantDrone = true;
     if (now.rFeed && !prevBtn.rFeed) wantFeed = true; if (now.lFeed && !prevBtn.lFeed) { if (ctrl) wantFeed = true; else wantRear = true; }   // left stick press: rear view
     if (now.lGrip && !prevBtn.lGrip) wantCtrl = true;
+    if (state === 'brief' && now.rMode && !prevBtn.rMode) wantConfirm = true;   // A deploys from the briefing room
     if (now.rTrig && !prevBtn.rTrig) xrTrig(rightCtrl); if (now.lTrig && !prevBtn.lTrig) xrTrig(leftCtrl);
     LOG.xrBtn(now); prevBtn = now;
     if (!ctrl && state !== 'brief' && Math.abs(turn) > 0.6 && !snapLatch) { snapLatch = true; const a = -Math.sign(turn) * 30 * DEG, h = headPos.clone(); rig.position.sub(h); rig.position.applyAxisAngle(V(0, 1, 0), a); rig.position.add(h); yaw += a; }
