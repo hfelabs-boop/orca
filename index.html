@@ -137,7 +137,7 @@ button.sm{padding:.25rem .6rem;font-size:.78rem}
 <body>
 <div id="start" class="veil">
   <div class="card">
-    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 11 · VR buttons</small></h1>
+    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 12 · VR buttons</small></h1>
     <p class="lede">The light is going. Walk to overwatch, use two drones to see ahead, change sensors as it gets dark, and mark every hostile in the village before they see you. Hidden bombs (IEDs) lie on the roads and trails. Then walk out.</p>
     <div class="row">
       <button id="btnVR" disabled>Enter VR</button>
@@ -528,6 +528,7 @@ const GLSL_HOLE = `float holeK(vec2 p){ ${UG_RAMPS.map(r => `if(p.x > ${(Math.mi
 function hRaw(x, z) {
   const r = Math.hypot(x, z);
   return 2.0 * Math.sin(x * 0.021 + 1.3) * Math.cos(z * 0.017) + 1.1 * Math.sin(x * 0.05 + z * 0.043)
+    + 0.34 * Math.sin(x * 0.19 + z * 0.11) * Math.cos(z * 0.23 - x * 0.07) + 0.16 * Math.sin(x * 0.41 + 1.7) * Math.sin(z * 0.37 + 0.4)   // small rises and hollows, so the low sun has something to rake across
     + 17 * smooth(125, 235, r) * (0.55 + 0.45 * Math.sin(x * 0.013 + 0.7) * Math.cos(z * 0.011 + 2.0));
 }
 function H(x, z) { const d = Math.hypot(x - COMP.x, z - COMP.z); return lerp(hRaw(x, z), 0.6, Math.max(smooth(66, 36, d), smooth(26, 0, rectDist(x, z, TOWN)))); }   // the village and the town stand on level ground
@@ -537,10 +538,17 @@ function H(x, z) { const d = Math.hypot(x - COMP.x, z - COMP.z); return lerp(hRa
 // uKind: 0 plain · 1 ground · 2 leaf card · 3 corrugated steel · 4 grass · 5 paint and glass · 6 textured avatar · 7 weathered plaster
 const V = (x, y, z) => new T.Vector3(x, y, z), UP = V(0, 1, 0), Q0 = new T.Quaternion();
 const F32 = (a, n) => new T.Float32BufferAttribute(a, n), M = (p, q, s) => new T.Matrix4().compose(p, q, s);
-const U = { uUgL: { value: null }, uUgB: { value: new T.Vector4(0, 0, 1, 1) }, uHeadP: { value: new T.Vector3() }, uHeadD: { value: new T.Vector3(0, 0, -1) }, uHeadI: { value: 0 }, uHaze: { value: 0 }, uFogD: { value: 0 }, uRainV: { value: 0 }, uOver: { value: 0 }, uWet: { value: 0 }, uFlash: { value: 0 }, uWind: { value: 0.2 }, uWdir: { value: new T.Vector2(0.91, 0.41) }, uSh: { value: null }, uShM: { value: new T.Matrix4() }, uShOn: { value: 0 }, uShTx: { value: 1 / 2048 }, uSunC: { value: new T.Vector3(1.0, 0.60, 0.34) }, uMode: { value: 0 }, uDay: { value: 0.8 }, uSun: { value: V(-0.55, 0.32, -0.77).normalize() },
+const U = { uUgL: { value: null }, uUgB: { value: new T.Vector4(0, 0, 1, 1) }, uHeadP: { value: new T.Vector3() }, uHeadD: { value: new T.Vector3(0, 0, -1) }, uHeadI: { value: 0 }, uHaze: { value: 0 }, uFogD: { value: 0 }, uRainV: { value: 0 }, uOver: { value: 0 }, uWet: { value: 0 }, uFlash: { value: 0 }, uWind: { value: 0.2 }, uQ: { value: 1 }, uWdir: { value: new T.Vector2(0.91, 0.41) }, uSh: { value: null }, uShM: { value: new T.Matrix4() }, uShOn: { value: 0 }, uShTx: { value: 1 / 2048 }, uSunC: { value: new T.Vector3(1.0, 0.60, 0.34) }, uMode: { value: 0 }, uDay: { value: 0.8 }, uSun: { value: V(-0.55, 0.32, -0.77).normalize() },
   uFog: { value: new T.Color() }, uTime: { value: 0 }, uMap: { value: null }, uSq: { value: null }, uNoise: { value: null }, uSplat: { value: null }, uLeaf: { value: null },
   uLamp: { value: [V(0, -999, 0), V(0, -999, 0), V(0, -999, 0), V(0, -999, 0)] }, uLampI: { value: [0, 0, 0, 0] }, uLampOn: { value: 0 }, uCenter: { value: V(0, 0, 0) }, uSpan: { value: 40 } };
 const VARY = `varying vec3 vN; varying vec3 vW; varying vec2 vUv; varying vec3 vTint;`;
+// the colour of the sky at the horizon in a given direction: orange toward the low sun, dusty mauve away from it, afterglow as the light goes.
+// The sky, the distance haze on the ground and the far mountains all use it, so they melt into each other.
+const GLSL_HOR = `const vec3 SUND = vec3(-0.5810, 0.0317, -0.8133);
+vec3 horizonC(vec3 d, float day, vec3 fog, float over, float fogD){
+  float az = dot(normalize(d.xz + vec2(1e-5)), normalize(SUND.xz)), azk = 0.5 + 0.5*az; azk *= azk;
+  vec3 hc = mix(vec3(0.60,0.57,0.67), vec3(1.0,0.62,0.32), azk)*day + vec3(0.85,0.30,0.10)*azk*azk*smoothstep(0.0, 0.35, day)*(1.0 - day)*0.7 + vec3(0.020,0.028,0.055)*(1.0 - day);
+  return mix(hc, fog, clamp(max(over*0.92, fogD*1.15), 0.0, 1.0)); }`;
 const VS = `${VARY}
 uniform float uKind; uniform float uTime; uniform float uWind; uniform vec2 uWdir;
 void main(){ vec4 w = modelMatrix*vec4(position,1.0);
@@ -554,17 +562,17 @@ void main(){ vec4 w = modelMatrix*vec4(position,1.0);
 #endif
   gl_Position = projectionMatrix*viewMatrix*w; }`;
 const VS_GRASS = `${VARY}
-attribute vec2 aOff; attribute vec4 aRnd; uniform vec3 uCenter; uniform float uSpan; uniform float uTime; uniform sampler2D uSplat; uniform float uWind; uniform vec2 uWdir;
+attribute vec2 aOff; attribute vec4 aRnd; uniform vec3 uCenter; uniform float uSpan; uniform float uTime; uniform sampler2D uSplat; uniform sampler2D uNoise; uniform float uWind; uniform vec2 uWdir;
 float sm(float a, float b, float v){ float t = clamp((v-a)/(b-a), 0.0, 1.0); return t*t*(3.0-2.0*t); }
 ${GLSL_HOLE}
 float terrainH(vec2 p){ float r = length(p);
-  float h = 2.0*sin(p.x*0.021+1.3)*cos(p.y*0.017) + 1.1*sin(p.x*0.05+p.y*0.043) + 17.0*sm(125.0,235.0,r)*(0.55+0.45*sin(p.x*0.013+0.7)*cos(p.y*0.011+2.0));
+  float h = 2.0*sin(p.x*0.021+1.3)*cos(p.y*0.017) + 1.1*sin(p.x*0.05+p.y*0.043) + 0.34*sin(p.x*0.19+p.y*0.11)*cos(p.y*0.23-p.x*0.07) + 0.16*sin(p.x*0.41+1.7)*sin(p.y*0.37+0.4) + 17.0*sm(125.0,235.0,r)*(0.55+0.45*sin(p.x*0.013+0.7)*cos(p.y*0.011+2.0));
   return mix(h, 0.6, max(sm(66.0, 36.0, length(p - vec2(${COMP.x.toFixed(1)}, ${COMP.z.toFixed(1)}))), sm(26.0, 0.0, length(max(max(vec2(${TOWN.x0.toFixed(1)}, ${TOWN.z0.toFixed(1)}) - p, p - vec2(${TOWN.x1.toFixed(1)}, ${TOWN.z1.toFixed(1)})), 0.0))))); }
 void main(){
   vec2 c = mod(aOff - uCenter.xz + uSpan*0.5, uSpan) - uSpan*0.5 + uCenter.xz;
   float fade = (1.0 - smoothstep(uSpan*0.34, uSpan*0.49, length(c - uCenter.xz)))*holeK(c);
   vec3 sp = texture2D(uSplat, c/640.0 + 0.5).rgb;
-  float s = (0.55 + 0.9*aRnd.y)*fade*(1.0 - smoothstep(0.25, 0.6, sp.g + sp.b));
+  float s = (0.55 + 0.9*aRnd.y)*fade*(1.0 - smoothstep(0.25, 0.6, sp.g + sp.b))*(0.6 + 0.75*smoothstep(0.25, 0.75, texture2D(uNoise, c*0.013 + 0.2).r));   // taller in the greener patches
   float ca = cos(aRnd.x*6.2832), sa = sin(aRnd.x*6.2832);
   vec3 p = vec3(ca*position.x - sa*position.z, position.y*(0.7 + 0.7*aRnd.w), sa*position.x + ca*position.z)*s;
   float sway = sin(uTime*1.3 + c.x*0.35 + c.y*0.27)*0.6 + sin(uTime*2.9 + c.x*1.1 + c.y*0.7)*0.25;
@@ -579,9 +587,10 @@ uniform sampler2D uMap; uniform sampler2D uSq; uniform sampler2D uNoise; uniform
 uniform vec3 uLamp[4]; uniform float uLampI[4]; uniform vec3 uColor; uniform float uHeat; uniform float uDetail; uniform float uKind; uniform float uEmis; uniform float uFill; uniform sampler2D uTex; uniform sampler2D uBump;
 uniform sampler2D uSh; uniform mat4 uShM; uniform float uShOn; uniform float uShTx;
 uniform float uHaze; uniform float uFogD; uniform float uRainV; uniform float uOver; uniform float uWet; uniform float uFlash;
-uniform sampler2D uUgL; uniform vec4 uUgB; uniform vec3 uHeadP; uniform vec3 uHeadD; uniform float uHeadI;
+uniform sampler2D uUgL; uniform vec4 uUgB; uniform vec3 uHeadP; uniform vec3 uHeadD; uniform float uHeadI; uniform float uQ;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
 ${GLSL_HOLE}
+${GLSL_HOR}
 vec3 aces(vec3 x){ return clamp((x*(2.51*x + 0.03))/(x*(2.43*x + 0.59) + 0.14), 0.0, 1.0); }
 float sunVis(vec3 p, vec3 n){ // 1 where the surface can see the sun, 0 in shadow; soft at the edges
   if(uShOn < 0.5) return 1.0;
@@ -594,37 +603,47 @@ float sunVis(vec3 p, vec3 n){ // 1 where the surface can see the sun, 0 in shado
 void main(){
   if(uMode == 9){ if(uKind > 1.5 && uKind < 2.5 && texture2D(uLeaf, vUv).r < 0.45) discard; gl_FragColor = vec4(1.0); return; }   // shadow pass: only the shape matters
   vec3 Vd = cameraPosition - vW; float dist = length(Vd); vec3 V = Vd/dist; vec3 N = normalize(vN);
-  vec3 alb = uColor*vTint; float shade = 1.0, soft = 0.0, gloss = 0.0;
+  vec3 alb = uColor*vTint; float shade = 1.0, soft = 0.0, gloss = 0.0, trans = 0.0;
   float fogH = exp(-max(0.5*(cameraPosition.y + vW.y) - 1.0, 0.0)*0.045);        // fog hugs the ground: thinner when seen from a drone
-  float wxExt = uHaze*0.0045 + uRainV*0.0035 + uFogD*0.034*fogH, pud = 0.0;
+  float wxExt = uHaze*0.0045 + uRainV*0.0035 + uFogD*0.034*fogH + 0.0045*smoothstep(1.0, -2.2, vW.y)*(1.0 - 0.6*uDay), pud = 0.0;   // as the light goes, mist gathers in the hollows
   vec2 ugUV = (vW.xz - uUgB.xy)/uUgB.zw; float ugK = (ugUV.x > 0.0 && ugUV.x < 1.0 && ugUV.y > 0.0 && ugUV.y < 1.0) ? smoothstep(-0.35, -1.3, vW.y) : 0.0, ugL = ugK > 0.0 ? texture2D(uUgL, ugUV).r*1.6 : 0.0;   // underground: no sky, only bulbs
   vec3 hv = uHeadP - vW; float hdl = max(length(hv), 0.05), headL = uHeadI*smoothstep(0.87, 0.975, dot(-hv/hdl, uHeadD))/(1.0 + hdl*hdl*0.12);   // the light you carry
   float nz = texture2D(uNoise, vW.xz*0.07 + vec2(0.37 + vW.y*0.05)).r;
   if(uKind > 1.5 && uKind < 2.5){
-    if(texture2D(uLeaf, vUv).r < mix(0.5, 0.2, smoothstep(25.0, 130.0, dist))) discard;
-    alb *= 0.7 + 0.6*nz; soft = 1.0;
+    vec3 lf = texture2D(uLeaf, vUv).rgb; if(lf.r < mix(0.5, 0.2, smoothstep(25.0, 130.0, dist))) discard;
+    alb *= (0.62 + 0.75*lf.g)*(0.7 + 0.6*nz)*mix(vec3(1.06,0.98,0.80), vec3(0.88,1.06,0.86), texture2D(uNoise, vW.xz*0.031 + 0.6).r); soft = 1.0; trans = 0.6;   // leaves let the low sun through
   } else if(uKind > 0.5 && uKind < 1.5){
     if(holeK(vW.xz) < 0.5) discard;   // the open mouth of a tunnel ramp
     vec3 sp = texture2D(uSplat, vW.xz/640.0 + 0.5).rgb;
     float n1 = texture2D(uNoise, vW.xz*0.009).r, fib = texture2D(uMap, vW.xz*0.19).g;
-    float mac = texture2D(uNoise, vW.xz*0.0031 + 0.71).r, near = smoothstep(28.0, 3.0, dist), fib2 = texture2D(uMap, vW.zx*0.67 + 0.5).g;   // large patches break the tiling; a second, finer layer shows close up
+    float mac = texture2D(uNoise, vW.xz*0.0031 + 0.71).r, near = smoothstep(28.0, 3.0, dist)*uQ, fib2 = texture2D(uMap, vW.zx*0.67 + 0.5).g;   // large patches break the tiling; a second, finer layer shows close up
     fib = mix(fib, fib*(0.7 + 0.6*fib2), near);
     vec3 grass = mix(vec3(0.45,0.40,0.26), vec3(0.68,0.61,0.41), n1)*(0.72 + 0.56*nz)*(0.8 + 0.4*mac);
     grass = mix(grass, vec3(0.33,0.37,0.22), smoothstep(0.58, 0.8, n1)*0.55)*(0.55 + 0.9*fib);
     vec3 dirt = vec3(0.46,0.37,0.27)*(0.7 + 0.6*nz)*(0.8 + 0.4*fib)*(0.86 + 0.28*mac)*(1.0 - 0.25*near*smoothstep(0.62, 0.8, texture2D(uNoise, vW.xz*0.9).r));   // pebbles and ruts in the dirt up close
     vec3 gravel = vec3(0.50,0.48,0.45)*(0.45 + 0.75*texture2D(uMap, vW.zx*0.71 + 0.3).g + 0.35*fib)*(0.8 + 0.4*nz);
     alb = mix(mix(grass, dirt, sp.g), gravel, sp.b); shade = 1.0 - 0.8*sp.r;
+    alb = mix(alb, alb*vec3(1.2,0.93,0.74), smoothstep(0.5, 0.82, mac)*0.55);   // red earth showing through in places
+    if(near > 0.01){   // close up: loose stones, and cracks in the dry dirt
+      vec2 cg = vW.xz*2.3, ci = floor(cg), cf = fract(cg) - 0.5, cp = (vec2(hash(ci + 7.3), hash(ci + 3.1)) - 0.5)*0.6; float sr = 0.05 + 0.15*hash(ci + 1.7), st = step(0.74, hash(ci))*smoothstep(sr, sr*0.5, length(cf - cp))*near;
+      alb = mix(alb, vec3(0.50,0.47,0.43)*(0.55 + 0.7*hash(ci + 5.5)), st*0.85); N = normalize(N + vec3(cf.x - cp.x, 0.0, cf.y - cp.y)*st*5.0);
+      alb *= 1.0 - 0.5*smoothstep(0.02, 0.0, abs(texture2D(uNoise, vW.xz*0.33 + 0.17).r - 0.5))*sp.g*near; }
     float fx1 = texture2D(uMap, vW.xz*0.19 + vec2(0.014, 0.0)).g, fz1 = texture2D(uMap, vW.xz*0.19 + vec2(0.0, 0.014)).g;
     N = normalize(N + vec3(fib - fx1, 0.0, fib - fz1)*1.5*smoothstep(90.0, 10.0, dist));   // fine relief so the low sun rakes across the ground
     pud = uWet*smoothstep(0.54, 0.74, texture2D(uNoise, vW.xz*0.05 + 0.31).r*0.7 + nz*0.3)*smoothstep(0.35, 0.9, N.y)*(1.0 - sp.b*0.5)*0.85;   // puddles collect in the low patches
     alb *= 1.0 - 0.62*pud; N = normalize(mix(N, vec3(0.0,1.0,0.0), pud*0.9));
   } else if(uKind > 3.5 && uKind < 4.5){
     shade = 1.0 - 0.8*texture2D(uSplat, vW.xz/640.0 + 0.5).r;
+    alb *= mix(vec3(1.14,1.0,0.76), vec3(0.76,0.98,0.70), smoothstep(0.35, 0.7, texture2D(uNoise, vW.xz*0.013 + 0.2).r))*(0.5 + 0.62*vUv.y); trans = vUv.y;   // straw and greener patches, dark at the root, tips that glow against the sun
   } else if(uKind > 2.5 && uKind < 3.5){
     float wall = 1.0 - abs(N.y), ph = (vW.x + vW.z)*22.0;
     N = normalize(N + vec3(N.z, 0.0, -N.x)*cos(ph)*0.45*wall);
     alb *= (1.0 + 0.1*sin(ph)*wall)*(0.7 + 0.55*texture2D(uNoise, vec2((vW.x + vW.z)*0.9, vW.y*0.06)).r);
   } else if(uKind > 5.5 && uKind < 6.5){ alb = texture2D(uTex, vUv).rgb*uColor;
+  } else if(uKind > 8.5){   // bark and rock: grain along the surface, lichen on the upper faces, rough relief
+    float g1 = texture2D(uNoise, vec2(vW.x + vW.z, vW.y*0.3)*1.7).r, g2 = texture2D(uNoise, vW.xz*0.7 + vW.y*0.55).r;
+    alb *= (0.5 + 1.0*g1)*(0.78 + 0.44*g2); alb = mix(alb, alb*vec3(0.86,1.08,0.66), smoothstep(0.55, 0.75, g2)*smoothstep(0.25, 0.9, N.y)*0.6);
+    N = normalize(N + (vec3(g1, g2, g1*g2*2.0) - 0.5)*0.7);
   } else if(uKind > 7.5){
     alb = texture2D(uTex, vUv).rgb*uColor;
     float h0 = texture2D(uBump, vUv).r, hx = texture2D(uBump, vUv + dFdx(vUv)).r - h0, hy = texture2D(uBump, vUv + dFdy(vUv)).r - h0;
@@ -654,13 +673,14 @@ void main(){
     vec3 amb = mix(gndA, skyA, 0.5 + 0.5*N.y)*(0.55 + 0.45*shade)*mix(0.7, 1.0, sv)*(1.0 + 0.4*uOver)*mix(1.0, 0.012, ugK);
     col = la*(amb + mix(uSunC*uSunC, uSunC, 0.55)*d2*3.6*(1.0 - 0.88*uOver)*(1.0 - ugK)*ndl*shade*sv + vec3(1.0,0.66,0.36)*ugL*ugK*0.8 + vec3(1.0,0.95,0.85)*headL*1.3*max(dot(N, hv/hdl), 0.1) + lamp*0.6 + vec3(0.86,0.92,1.0)*uFill*0.5*(0.6 + 0.4*N.y)) + uColor*uColor*uEmis*(0.05 + 1.2*uLampOn);
     if(uKind > 4.5 && uKind < 5.5) col += mix(vec3(0.002,0.003,0.006), vec3(0.22,0.24,0.30), d2)*pow(rim, 3.0)*0.4;
-    if(uKind > 7.5) col += vec3(1.0,0.6,0.3)*d2*sv*pow(max(dot(N, normalize(uSun + V)), 0.0), 22.0)*(0.05 + 0.5*gloss) + mix(vec3(0.002,0.003,0.006), vec3(0.14,0.17,0.24), d2)*pow(rim, 3.0)*(0.08 + 0.3*gloss);
+    col += la*uSunC*d2*(1.0 - 0.88*uOver)*(1.0 - ugK)*sv*shade*trans*(2.2*pow(max(dot(-V, uSun), 0.0), 3.0) + 0.3);   // light coming through blades and leaves when you look toward the sun
+    if(uKind > 7.5 && uKind < 8.5) col += vec3(1.0,0.6,0.3)*d2*sv*pow(max(dot(N, normalize(uSun + V)), 0.0), 22.0)*(0.05 + 0.5*gloss) + mix(vec3(0.002,0.003,0.006), vec3(0.14,0.17,0.24), d2)*pow(rim, 3.0)*(0.08 + 0.3*gloss);
     float wetK = max(pud, uWet*0.18*smoothstep(0.5, 1.0, N.y)), fr = 0.04 + 0.96*pow(1.0 - abs(dot(N, V)), 5.0);   // wet ground mirrors the sky
     vec3 skyR = mix(vec3(0.0015,0.0022,0.0050), vec3(0.20,0.24,0.31), d2)*(1.0 - 0.3*uOver) + vec3(0.6,0.7,1.0)*uFlash*0.6;
     col += (1.0 - ugK)*skyR*fr*wetK*(0.5 + 1.1*pud) + (1.0 - ugK)*la*vec3(0.55,0.65,1.0)*uFlash*1.6*(0.35 + 0.65*N.y);
     col = sqrt(aces(col*1.08));
     float sg = pow(max(dot(-V, vec3(-0.581,0.0,-0.814)), 0.0), 4.0);
-    vec3 fogC = uFog + vec3(0.42,0.18,0.04)*sg*uDay*(1.0 + 2.2*uHaze)*(1.0 - 0.8*uOver) + vec3(0.30,0.36,0.50)*uFlash*0.5;   // haze scatters the low sun into a glow
+    vec3 fogC = horizonC(-V, uDay, uFog, uOver, uFogD) + vec3(0.42,0.18,0.04)*sg*uDay*(0.35 + 2.2*uHaze)*(1.0 - 0.8*uOver) + vec3(0.30,0.36,0.50)*uFlash*0.5;   // haze scatters the low sun into a glow
     col = mix(col, mix(fogC, vec3(0.003), ugK), 1.0 - exp(-dist*mix(0.0052 + wxExt, 0.06, ugK)));
   } else if(uMode == 1){
     float l = lum*(mix(0.40 + 0.6*ndl*shade, 0.04 + ugL*0.45 + headL*0.8, ugK) + uFill)*1.45 + uHeat*0.07 + dot(alb*lamp, vec3(0.5)) + uEmis*uLampOn;
@@ -735,41 +755,60 @@ U.uSq.value = canvasTex(512, 512, (c, w, h) => {
   }
 }, true);
 U.uSq.value.anisotropy = ANISO;
-U.uLeaf.value = canvasTex(256, 256, (c) => { // one spray of leaves, cut out by the shader
-  c.fillStyle = '#000'; c.fillRect(0, 0, 256, 256); c.fillStyle = '#fff'; c.strokeStyle = '#fff'; c.lineWidth = 2;
-  c.beginPath(); c.arc(128, 128, 16, 0, 7); c.fill();
-  for (let i = 0; i < 9; i++) { const a = rnd() * 6.2832; c.beginPath(); c.moveTo(128, 128); c.lineTo(128 + Math.cos(a) * 95, 128 + Math.sin(a) * 95); c.stroke(); }
+U.uLeaf.value = canvasTex(512, 512, (c) => { // one spray of leaves, cut out by the shader; the green channel gives each leaf its own brightness
+  let ls = 4711; const lr = () => { ls = (ls * 16807) % 2147483647; return ls / 2147483647; };
+  c.fillStyle = '#000'; c.fillRect(0, 0, 512, 512); c.fillStyle = 'rgb(255,120,0)'; c.strokeStyle = 'rgb(255,70,0)'; c.lineWidth = 3;
+  c.beginPath(); c.arc(256, 256, 32, 0, 7); c.fill();
+  for (let i = 0; i < 9; i++) { const a = rnd() * 6.2832; c.beginPath(); c.moveTo(256, 256); c.lineTo(256 + Math.cos(a) * 190, 256 + Math.sin(a) * 190); c.stroke(); }
   for (let i = 0; i < 120; i++) {
-    const a = rnd() * 6.2832, r = Math.pow(rnd(), 0.6) * 112, x = 128 + Math.cos(a) * r, y = 128 + Math.sin(a) * r;
-    c.beginPath(); c.ellipse(x, y, 6 + rnd() * 6, 3 + rnd() * 3, rnd() * 3.14, 0, 7); c.fill();
+    const a = rnd() * 6.2832, r = Math.pow(rnd(), 0.6) * 224, x = 256 + Math.cos(a) * r, y = 256 + Math.sin(a) * r, rx = 12 + rnd() * 12, ry = 6 + rnd() * 6, ro = rnd() * 3.14;
+    c.fillStyle = `rgb(255,${90 + lr() * 165 | 0},0)`; c.beginPath(); c.ellipse(x, y, rx, ry, ro, 0, 7); c.fill();
+    c.strokeStyle = 'rgba(255,60,0,.55)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x - Math.cos(ro) * rx, y - Math.sin(ro) * rx); c.lineTo(x + Math.cos(ro) * rx, y + Math.sin(ro) * rx); c.stroke();   // midrib
   }
 });
 
 /* ───────────── sky and ground ───────────── */
 const world = new T.Group(); scene.add(world);
-const sky = new T.Mesh(new T.SphereGeometry(1500, 24, 12), new T.ShaderMaterial({
+const sky = new T.Mesh(new T.SphereGeometry(2200, 32, 16), new T.ShaderMaterial({
   uniforms: { uMode: U.uMode, uDay: U.uDay, uNoise: U.uNoise, uTime: U.uTime, uFog: U.uFog, uHaze: U.uHaze, uFogD: U.uFogD, uOver: U.uOver, uFlash: U.uFlash }, side: T.BackSide, depthWrite: false,
   vertexShader: `varying vec3 vD; void main(){ vD = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: `uniform int uMode; uniform float uDay; uniform float uTime; uniform sampler2D uNoise; uniform vec3 uFog; uniform float uHaze; uniform float uFogD; uniform float uOver; uniform float uFlash; varying vec3 vD;
   float h3(vec3 p){ return fract(sin(dot(p, vec3(127.1,311.7,74.7)))*43758.5453); }
+  ${GLSL_HOR}
   void main(){ vec3 d = normalize(vD); float h = d.y; vec3 c;
     if(uMode == 0){
-      vec3 top = mix(vec3(0.006,0.010,0.030), vec3(0.22,0.34,0.60), uDay), hor = mix(vec3(0.025,0.035,0.065), vec3(0.74,0.70,0.68), uDay);
-      float sd = max(dot(d, normalize(vec3(-0.55,0.03,-0.77))), 0.0);
-      c = mix(hor, top, pow(smoothstep(-0.02, 0.7, h), 0.55));
+      float sd = max(dot(d, SUND), 0.0), hh = max(h, 0.0), az = dot(normalize(d.xz + vec2(1e-5)), normalize(SUND.xz)), azk = 0.5 + 0.5*az; azk *= azk;
+      vec3 hor = horizonC(d, uDay, uFog, 0.0, 0.0);
+      vec3 up = mix(vec3(0.004,0.007,0.022), mix(vec3(0.36,0.48,0.72), vec3(0.09,0.18,0.46), smoothstep(0.08, 0.8, hh)), uDay);   // pale blue above the glow, deep blue overhead
+      c = mix(hor, up, pow(smoothstep(-0.02, 0.42, h), 0.62));
+      c += vec3(0.34,0.11,0.02)*azk*exp(-hh*6.5)*uDay + vec3(0.11,0.04,0.08)*(1.0 - azk)*exp(-abs(hh - 0.09)*13.0)*uDay;   // the orange band round the sun, and the pink band opposite it
       c += (vec3(0.95,0.42,0.12)*pow(sd, 9.0)*0.55 + vec3(1.0,0.78,0.45)*pow(sd, 90.0)*0.8 + vec3(1.0,0.9,0.7)*pow(sd, 900.0)*1.4 + vec3(1.0,0.95,0.85)*smoothstep(0.99955, 0.99985, sd)*2.0)*uDay;
-      c = mix(c, c*vec3(1.06,0.93,0.86) + vec3(0.05,0.02,0.0)*uDay, smoothstep(0.25, 0.0, abs(h))*0.6);
+      float night = 1.0 - smoothstep(0.10, 0.5, uDay), cl = 0.0;
       if(h > 0.0){
-        vec2 uv = d.xz/(h + 0.14)*0.085;
         vec2 wv = vec2(uTime*0.0005, 0.0), sdir = normalize(vec2(-0.55,-0.77))*0.035;
+        // high cirrus: long streaks, lit pink and gold from below
+        vec2 cu = d.xz/(h + 0.10)*0.036 + wv*0.4; float ci = texture2D(uNoise, vec2(cu.x*0.42 + cu.y*0.20, cu.y*1.9 - cu.x*0.25)).r*0.65 + texture2D(uNoise, vec2(cu.x*1.3 + 0.4, cu.y*5.1)).r*0.35;
+        ci = smoothstep(0.58, 0.90, ci)*smoothstep(0.02, 0.22, h)*0.5;
+        c = mix(c, mix(vec3(0.045,0.055,0.09), mix(vec3(0.86,0.74,0.80), vec3(1.0,0.70,0.46), azk), uDay), ci);
+        // cumulus: bright rims toward the sun, grey-violet bases
+        vec2 uv = d.xz/(h + 0.14)*0.085;
         float cb = texture2D(uNoise, uv + wv).r*0.56 + texture2D(uNoise, uv*2.9 + 0.3 + wv*1.6).r*0.28 + texture2D(uNoise, uv*7.3 + 0.7).r*0.16;
         float cs = texture2D(uNoise, uv + wv + sdir).r*0.56 + texture2D(uNoise, uv*2.9 + 0.3 + wv*1.6 + sdir*2.9).r*0.28 + 0.08;
-        float cl = smoothstep(0.52, 0.80, cb)*smoothstep(0.0, 0.2, h), lit = clamp((cb - cs)*3.2 + 0.45, 0.0, 1.0);
-        vec3 warm = mix(vec3(0.62,0.60,0.66), vec3(1.0,0.62,0.36), pow(sd, 1.6)), cool = mix(vec3(0.30,0.31,0.40), vec3(0.42,0.30,0.32), pow(sd, 2.0));
-        vec3 cc = mix(vec3(0.030,0.038,0.065), mix(cool, warm, lit), uDay);
-        c = mix(c, cc, cl*0.85);
-        vec3 g = d*210.0, f = fract(g) - 0.5; float st = step(0.9965, h3(floor(g)))*smoothstep(0.42, 0.1, length(f));
-        c += vec3(0.9,0.93,1.0)*st*(1.0 - smoothstep(0.12, 0.5, uDay))*smoothstep(0.03, 0.25, h)*(1.0 - cl);
+        cl = smoothstep(0.52, 0.80, cb)*smoothstep(0.0, 0.2, h); float lit = clamp((cb - cs)*3.4 + 0.45, 0.0, 1.0), edge = smoothstep(0.80, 0.56, cb);
+        vec3 warm = mix(vec3(0.80,0.70,0.74), vec3(1.0,0.68,0.40), pow(sd, 1.4)), cool = mix(vec3(0.28,0.29,0.40), vec3(0.44,0.30,0.33), pow(sd, 2.0));
+        vec3 cc = mix(vec3(0.030,0.038,0.065) + vec3(0.05,0.06,0.08)*night*edge, mix(cool, warm, lit) + vec3(1.0,0.72,0.42)*edge*pow(sd, 5.0)*0.9, uDay);
+        c = mix(c, cc, cl*0.88);
+        // night sky: two sizes of star that twinkle, the Milky Way, the moon
+        if(night > 0.0){
+          float clear = (1.0 - cl)*(1.0 - ci)*night*smoothstep(0.02, 0.22, h);
+          vec3 g = d*210.0, f = fract(g) - 0.5; float r1 = h3(floor(g)), st = step(0.9955, r1)*smoothstep(0.42, 0.08, length(f))*(0.65 + 0.35*sin(uTime*2.6 + r1*900.0));
+          vec3 g2 = d*520.0, f2 = fract(g2) - 0.5; float r2 = h3(floor(g2)); st += step(0.992, r2)*smoothstep(0.45, 0.1, length(f2))*0.42;
+          float band = exp(-pow(dot(d, vec3(0.37,0.52,-0.77)), 2.0)*16.0), mwn = texture2D(uNoise, d.xz*1.7 + d.y*0.9).r*0.6 + texture2D(uNoise, d.zx*5.3 + 0.3).r*0.4;
+          st += step(0.985 - 0.012*band, r2)*smoothstep(0.45, 0.1, length(f2))*0.3*band;
+          c += (mix(vec3(0.85,0.90,1.0), vec3(1.0,0.86,0.70), fract(r1*77.0))*st + vec3(0.050,0.058,0.085)*band*smoothstep(0.30, 0.75, mwn))*clear;
+          float md = dot(d, vec3(0.6156,0.4617,0.6387)), mdisc = smoothstep(0.99962, 0.99974, md);
+          c += (vec3(0.90,0.92,0.98)*mdisc*(0.72 + 0.28*texture2D(uNoise, d.xy*22.0).r) + vec3(0.10,0.12,0.17)*pow(max(md, 0.0), 260.0) + vec3(0.03,0.035,0.05)*pow(max(md, 0.0), 24.0))*night*(1.0 - cl*0.85);
+        }
       }
       c += vec3(0.95,0.5,0.2)*pow(sd, 3.0)*uHaze*uDay*0.35*(1.0 - uOver);                                  // haze: a broad warm glow round the sun
       vec3 grey = mix(vec3(0.004,0.005,0.009), vec3(0.50,0.52,0.56), uDay)*(0.82 + 0.3*smoothstep(0.0, 0.8, h));
@@ -784,8 +823,92 @@ const sky = new T.Mesh(new T.SphereGeometry(1500, 24, 12), new T.ShaderMaterial(
     gl_FragColor = vec4(c, 1.0); }`
 }));
 sky.frustumCulled = false; sky.renderOrder = -10; scene.add(sky);
+let motes = null; const farGrp = new T.Group(); world.add(farGrp);   // mountains and birds: drawn for your own eyes only, not for the drone feeds or the shadow pass
+{ // far country: three ranges beyond the edge of the map, each paler than the one in front, lit by the same low sun
+  const nzB = (x, z) => { const fx = ((x % NS) + NS) % NS, fz = ((z % NS) + NS) % NS, x0 = fx | 0, z0 = fz | 0, x1 = (x0 + 1) % NS, z1 = (z0 + 1) % NS, tx = fx - x0, tz = fz - z0; return lerp(lerp(noiseF[z0 * NS + x0], noiseF[z0 * NS + x1], tx), lerp(noiseF[z1 * NS + x0], noiseF[z1 * NS + x1], tx), tz); };
+  const ridge = (x, z, f) => { let v = 0, a = 1, t = 0; for (let o = 0; o < 4; o++) { const n = nzB(x * f + o * 31.7, z * f + o * 17.3); v += a * (1 - Math.abs(2 * n - 1)); t += a; a *= 0.5; f *= 2.1; } return v / t; };   // sharp crests, like eroded rock
+  const mat = new T.ShaderMaterial({
+    uniforms: { uMode: U.uMode, uDay: U.uDay, uSun: U.uSun, uSunC: U.uSunC, uFog: U.uFog, uNoise: U.uNoise, uHaze: U.uHaze, uFogD: U.uFogD, uRainV: U.uRainV, uOver: U.uOver, uFlash: U.uFlash },
+    vertexShader: `varying vec3 vW; varying vec3 vN; void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; vN = normal; gl_Position = projectionMatrix*viewMatrix*w; }`,
+    fragmentShader: `uniform int uMode; uniform float uDay; uniform vec3 uSun; uniform vec3 uSunC; uniform vec3 uFog; uniform sampler2D uNoise; uniform float uHaze; uniform float uFogD; uniform float uRainV; uniform float uOver; uniform float uFlash;
+    varying vec3 vW; varying vec3 vN;
+    ${GLSL_HOR}
+    vec3 aces(vec3 x){ return clamp((x*(2.51*x + 0.03))/(x*(2.43*x + 0.59) + 0.14), 0.0, 1.0); }
+    void main(){
+      if(uMode == 9) discard;
+      vec3 Vd = cameraPosition - vW; float dist = length(Vd); vec3 V = Vd/dist, N = normalize(vN);
+      float n1 = texture2D(uNoise, vW.xz*0.0045).r, n2 = texture2D(uNoise, vec2(vW.x + vW.z, vW.y*2.6)*0.0052).r, n3 = texture2D(uNoise, vW.xz*0.021 + vW.y*0.004).r;
+      float gl = abs(texture2D(uNoise, vW.xz*0.0105 + 0.4).r - 0.5)*2.0, gl2 = abs(texture2D(uNoise, vW.xz*0.031 + 0.1).r - 0.5)*2.0;   // gullies and spurs cut into the slopes
+      N = normalize(N + (vec3(n3, 0.5, n2) - 0.5)*0.55 + vec3(gl - 0.5, 0.0, gl2 - 0.5)*0.7);
+      float slope = 1.0 - N.y, strata = 0.5 + 0.5*sin(vW.y*0.30 + n1*7.0);
+      vec3 rock = mix(vec3(0.40,0.30,0.24), vec3(0.62,0.49,0.37), n2)*(0.74 + 0.26*strata)*(0.75 + 0.5*n3);
+      vec3 veg = mix(vec3(0.46,0.41,0.25), vec3(0.29,0.33,0.19), n1)*(0.8 + 0.4*n3);
+      vec3 alb = mix(veg, rock, smoothstep(0.10, 0.34, slope + (n1 - 0.5)*0.25))*(0.62 + 0.38*smoothstep(0.0, 0.22, gl))*(0.8 + 0.2*smoothstep(0.0, 0.3, gl2)), col;
+      float ext = 0.00075 + uHaze*0.0030 + uRainV*0.0030 + uFogD*0.02, fogK = 1.0 - exp(-dist*ext*mix(1.0, 0.45, smoothstep(0.0, 140.0, vW.y)));   // mist lies in the valleys, the crests stand clear
+      if(uMode == 0){
+        float ndl = max(dot(N, uSun), 0.0), d2 = uDay*uDay; vec3 la = alb*alb;
+        vec3 amb = mix(mix(vec3(0.0003,0.0004,0.0007), vec3(0.14,0.105,0.075), d2), mix(vec3(0.0006,0.0010,0.0026), vec3(0.27,0.36,0.58), d2), 0.5 + 0.5*N.y)*(1.0 + 0.4*uOver);
+        col = la*(amb*1.3 + mix(uSunC*uSunC, uSunC, 0.55)*d2*6.0*(1.0 - 0.88*uOver)*ndl) + la*vec3(0.55,0.65,1.0)*uFlash*1.2;   // the last sun catches the slopes that face it
+        col = sqrt(aces(col*1.08));
+        float sg = pow(max(dot(-V, SUND), 0.0), 4.0);
+        col = mix(col, horizonC(-V, uDay, uFog, uOver, uFogD) + vec3(0.42,0.18,0.04)*sg*uDay*(0.35 + 2.2*uHaze)*(1.0 - 0.8*uOver), fogK);
+      } else if(uMode == 1){ col = mix(vec3(0.70,0.96,0.82)*dot(alb, vec3(0.33))*(0.35 + 0.5*max(dot(N, uSun), 0.0)), vec3(0.03,0.07,0.05), fogK);
+      } else if(uMode == 2){ col = vec3(0.012);
+      } else if(uMode == 3){ col = mix(vec3(0.0,0.10,0.14), vec3(0.0,0.03,0.055), fogK);
+      } else col = vec3(0.22);
+      gl_FragColor = vec4(col, 1.0); }` });
+  for (const [R0, R1, HP, f, seed] of [[340, 800, 190, 0.016, 3], [720, 1300, 460, 0.011, 57], [1150, 2000, 900, 0.008, 131]]) {
+    const NA = 320, NR = 20, pos = [], idx = [];
+    for (let j = 0; j <= NR; j++) for (let i = 0; i <= NA; i++) {
+      const a = i / NA * 6.2832, t = j / NR, r = lerp(R0, R1, t), x = Math.cos(a) * r, z = Math.sin(a) * r, cx = Math.cos(a) * 40 + seed, cz = Math.sin(a) * 40 + seed;
+      const env = Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.15)), 0.9) * (0.25 + 0.95 * Math.pow(nzB(cx * 0.23, cz * 0.23), 1.3)), rg = ridge(x + seed * 9, z + seed * 5, f);
+      pos.push(x, -14 + HP * env * (0.22 + 1.1 * Math.pow(rg, 2.4)) + HP * 0.05 * env * (ridge(x * 3.1 + 7, z * 3.1 + 3, f) - 0.5), z);
+    }
+    for (let j = 0; j < NR; j++) for (let i = 0; i < NA; i++) { const k = j * (NA + 1) + i; idx.push(k, k + NA + 1, k + 1, k + 1, k + NA + 1, k + NA + 2); }
+    const g = new T.BufferGeometry(); g.setAttribute('position', F32(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    const m = new T.Mesh(g, mat); m.frustumCulled = false; farGrp.add(m);
+  }
+}
+{ // the air itself: dust that glows where you look toward the sun, and fireflies over the grass once it is dark
+  const N = 420, p = new Float32Array(N * 3), r = new Float32Array(N); let sd = 12345; const rr = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+  for (let i = 0; i < N; i++) { p[i * 3] = rr() * 30; p[i * 3 + 1] = rr(); p[i * 3 + 2] = rr() * 30; r[i] = rr(); }
+  const g = new T.BufferGeometry(); g.setAttribute('position', F32(p, 3)); g.setAttribute('aR', F32(r, 1));
+  const m = new T.Points(g, new T.ShaderMaterial({ uniforms: { uMode: U.uMode, uDay: U.uDay, uTime: U.uTime, uCenter: U.uCenter, uOver: U.uOver, uRainV: U.uRainV, uVH: { value: 800 } }, transparent: true, depthWrite: false, blending: T.AdditiveBlending,
+    vertexShader: `attribute float aR; uniform int uMode; uniform float uDay; uniform float uTime; uniform vec3 uCenter; uniform float uOver; uniform float uRainV; uniform float uVH; varying vec4 vC;
+    void main(){ float fly = step(0.86, aR), t = uTime;
+      vec3 q = vec3(position.x + sin(t*0.21 + aR*40.0)*1.6 + t*0.25, 0.0, position.z + cos(t*0.17 + aR*31.0)*1.6);
+      q.xz = mod(q.xz - uCenter.xz + 15.0, 30.0) - 15.0 + uCenter.xz;
+      q.y = uCenter.y + mix(-1.5 + position.y*4.5 + sin(t*0.3 + aR*17.0)*0.4, -1.45 + position.y*1.2 + sin(t*0.9 + aR*23.0)*0.25, fly);
+      vec4 mv = viewMatrix*vec4(q, 1.0); float dist = -mv.z, night = 1.0 - smoothstep(0.08, 0.3, uDay);
+      vec3 V = normalize(q - cameraPosition); float fwd = pow(max(dot(V, vec3(-0.5810, 0.0317, -0.8133)), 0.0), 6.0);
+      float aDust = (0.05 + 0.75*fwd)*uDay*(1.0 - uOver)*(1.0 - uRainV), aFly = night*smoothstep(0.55, 1.0, sin(t*(1.1 + aR*1.3) + aR*60.0))*0.95;
+      float a = mix(aDust, aFly, fly)*smoothstep(0.4, 1.4, dist)*(1.0 - smoothstep(10.0, 15.0, dist));
+      vC = vec4(mix(vec3(1.0,0.78,0.48), vec3(0.75,1.0,0.35), fly), a);
+      gl_PointSize = uMode == 0 ? clamp(mix(0.012, 0.03, fly)*uVH/max(dist, 0.3), 1.0, 14.0) : 0.0;
+      gl_Position = uMode == 0 && a > 0.004 ? projectionMatrix*mv : vec4(2.0, 2.0, 2.0, 1.0); }`,
+    fragmentShader: `varying vec4 vC; void main(){ float d = length(gl_PointCoord - 0.5); gl_FragColor = vec4(vC.rgb*vC.a*smoothstep(0.5, 0.05, d), 1.0); }` }));
+  m.frustumCulled = false; m.renderOrder = 4; world.add(m); motes = m;
+}
+let birdsM = null;
+{ // a loose flock of birds wheeling over the scrub in the last light
+  const NB = 16, pos = [], bird = [], wing = [], idx = []; let sd = 9973; const rr = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+  for (let i = 0; i < NB; i++) { const b = [rr() * 6.2832, 0.75 + rr() * 0.5, rr(), 0.8 + rr() * 0.5], k = pos.length / 3;
+    for (const [w, f] of [[0, 0.5], [0, -0.5], [-1, 0], [1, 0]]) { pos.push(0, 0, 0); bird.push(...b); wing.push(w, f); }
+    idx.push(k, k + 1, k + 2, k, k + 3, k + 1); }
+  const g = new T.BufferGeometry(); g.setAttribute('position', F32(pos, 3)); g.setAttribute('aBird', F32(bird, 4)); g.setAttribute('aWing', F32(wing, 2)); g.setIndex(idx);
+  const m = new T.Mesh(g, new T.ShaderMaterial({ uniforms: { uMode: U.uMode, uDay: U.uDay, uTime: U.uTime, uFog: U.uFog, uOver: U.uOver, uFogD: U.uFogD, uRainV: U.uRainV }, side: T.DoubleSide,
+    vertexShader: `attribute vec4 aBird; attribute vec2 aWing; uniform float uTime; uniform int uMode; uniform float uDay; uniform float uRainV; varying vec3 vW;
+    void main(){ float t = uTime*0.11*aBird.w + aBird.x, R = 46.0*aBird.y + 10.0*sin(uTime*0.07 + aBird.x*3.0);
+      vec3 c = vec3(-58.0 + cos(t)*R + sin(uTime*0.013)*40.0, 21.0 + 9.0*aBird.z + 2.5*sin(uTime*0.23 + aBird.x*5.0), -8.0 + sin(t)*R*0.8), fw = normalize(vec3(-sin(t), 0.0, cos(t)*0.8)), sdv = vec3(fw.z, 0.0, -fw.x);
+      float flap = sin(uTime*(7.0 + 3.0*aBird.z) + aBird.x*20.0), glide = smoothstep(-0.2, 0.6, sin(uTime*0.5 + aBird.x*9.0));
+      vec3 p = c + fw*aWing.y*0.34 + sdv*aWing.x*0.62 + vec3(0.0, abs(aWing.x)*(0.08 + 0.3*flap*glide), 0.0);
+      vW = p; gl_Position = uMode == 0 && uDay > 0.12 && uRainV < 0.3 ? projectionMatrix*viewMatrix*vec4(p, 1.0) : vec4(2.0, 2.0, 2.0, 1.0); }`,
+    fragmentShader: `uniform float uDay; uniform vec3 uFog; uniform float uOver; uniform float uFogD; varying vec3 vW; ${GLSL_HOR}
+    void main(){ vec3 Vd = cameraPosition - vW; float dist = length(Vd); gl_FragColor = vec4(mix(vec3(0.035,0.03,0.03), horizonC(-Vd/dist, uDay, uFog, uOver, uFogD), 1.0 - exp(-dist*(0.0045 + uFogD*0.03))), 1.0); }` }));
+  m.frustumCulled = false; farGrp.add(m); birdsM = m;
+}
 { // ground
-  const g = new T.PlaneGeometry(640, 640, 160, 160); g.rotateX(-Math.PI / 2); g.translate(1.37, 0, 0.83);
+  const g = new T.PlaneGeometry(640, 640, 208, 208); g.rotateX(-Math.PI / 2); g.translate(1.37, 0, 0.83);
   const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, H(p.getX(i), p.getZ(i)));
   g.computeVertexNormals();
   world.add(new T.Mesh(g, worldMat(0xffffff, 0, { detail: 1, kind: 1 })));
@@ -1163,9 +1286,9 @@ const village = [], FH = 3.0, NET = [11.2, 16.8, -72.74, -69.5];
   world.add(lit.mesh(worldMat(0xffc978, 0.6, { vc: true, emis: 0.7 }), false));
 }
 
-world.add(wood.mesh(worldMat(0xffffff, -0.1, { vc: true, detail: 0.3 })));
+world.add(wood.mesh(worldMat(0xffffff, -0.1, { vc: true, detail: 0.3, kind: 9 })));
 world.add(leaves.mesh(worldMat(0xffffff, -0.25, { vc: true, kind: 2, detail: 0.75, side: T.DoubleSide })));
-world.add(rocks.mesh(worldMat(0xffffff, -0.15, { vc: true, detail: 0.3 })));
+world.add(rocks.mesh(worldMat(0xffffff, -0.15, { vc: true, detail: 0.3, kind: 9 })));
 world.add(steel.mesh(worldMat(0xffffff, -0.7, { vc: true, kind: 3 }), true));
 world.add(props.mesh(worldMat(0xffffff, -0.4, { vc: true }), true));
 
@@ -1469,6 +1592,7 @@ function updateBlast(dt) {
 
 /* ───────────── smoke and fire: one cloud of soft points for all smoke, one for all flames ───────────── */
 const FXU = { uVH: { value: 600 }, uMode: U.uMode, uDay: U.uDay, uNoise: U.uNoise, uTime: U.uTime, uSun: U.uSun, uSunC: U.uSunC, uFog: U.uFog, uHaze: U.uHaze, uFogD: U.uFogD, uRainV: U.uRainV, uOver: U.uOver, uWet: U.uWet, uFlash: U.uFlash };
+if (motes) motes.material.uniforms.uVH = FXU.uVH;
 const FX_VS = `attribute vec4 aData; uniform float uVH; uniform int uMode; uniform float uDay; uniform vec3 uSun; uniform vec3 uSunC; uniform vec3 uFog;
 uniform float uHaze; uniform float uFogD; uniform float uRainV; uniform float uOver; uniform float uWet; uniform float uFlash;
 varying float vA; varying vec3 vC; varying float vSeed; varying float vAge; varying float vK; varying float vLit; varying float vDensK; varying float vGlow; varying vec3 vSunV; varying vec3 vAmb; varying vec3 vSunL; varying float vFog; varying vec3 vFogC;
@@ -1565,7 +1689,7 @@ const rain = (() => {
     vertexShader: `attribute float aEnd; uniform float uTime; uniform float uWind; uniform vec2 uWdir; uniform int uMode; uniform float uDay; uniform float uFlash; varying float vA; varying vec3 vC;
     float sm(float a, float b, float v){ float t = clamp((v-a)/(b-a), 0.0, 1.0); return t*t*(3.0-2.0*t); }
     float terrainH(vec2 p){ float r = length(p);
-      float h = 2.0*sin(p.x*0.021+1.3)*cos(p.y*0.017) + 1.1*sin(p.x*0.05+p.y*0.043) + 17.0*sm(125.0,235.0,r)*(0.55+0.45*sin(p.x*0.013+0.7)*cos(p.y*0.011+2.0));
+      float h = 2.0*sin(p.x*0.021+1.3)*cos(p.y*0.017) + 1.1*sin(p.x*0.05+p.y*0.043) + 0.34*sin(p.x*0.19+p.y*0.11)*cos(p.y*0.23-p.x*0.07) + 0.16*sin(p.x*0.41+1.7)*sin(p.y*0.37+0.4) + 17.0*sm(125.0,235.0,r)*(0.55+0.45*sin(p.x*0.013+0.7)*cos(p.y*0.011+2.0));
       return mix(h, 0.6, max(sm(66.0, 36.0, length(p - vec2(${COMP.x.toFixed(1)}, ${COMP.z.toFixed(1)}))), sm(26.0, 0.0, length(max(max(vec2(${TOWN.x0.toFixed(1)}, ${TOWN.z0.toFixed(1)}) - p, p - vec2(${TOWN.x1.toFixed(1)}, ${TOWN.z1.toFixed(1)})), 0.0))))); }
     void main(){ const float BX = 36.0, BY = 26.0; float sp = fract(position.x*7.31 + position.z*3.17);
       vec3 fall = vec3(uWdir.x*uWind*7.0, -(10.0 + 3.5*sp), uWdir.y*uWind*7.0), p = position*vec3(BX, BY, BX) + fall*uTime, rel = p - cameraPosition;
@@ -2515,7 +2639,7 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
   briefPanel = new T.Mesh(new T.PlaneGeometry(1.9, 1.07), new T.MeshBasicMaterial({ map: t, transparent: true })); briefPanel.position.set(0, 1.78, -1.95); briefGrp.add(briefPanel);
   const draw = () => { const x = c.getContext('2d'); x.clearRect(0, 0, 960, 540); x.fillStyle = 'rgba(8,30,38,.9)'; x.fillRect(0, 0, 960, 540);
     x.fillStyle = '#ffb81f'; x.fillRect(0, 0, 8, 540); x.fillStyle = '#e6f1f2'; x.textBaseline = 'alphabetic';
-    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 11', 300, 96);
+    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 12', 300, 96);
     x.font = `400 31px ${FONT}`; x.fillStyle = '#cfe0e2';
     const lines = ['1.  Follow the white route north to Overwatch.', '2.  MagniTude sweeps the village, Magni-X flies ahead.', '     Fuse both feeds to see everything they see.',
       '3.  Aim at a hostile and press Mark. Never mark cyan.', '4.  IEDs (hidden bombs) lie on roads and trails.', '     Keep 2 m away. Sensors and drones show them.', '5.  Stay out of their sight, then walk to Exfil.'];
@@ -3494,18 +3618,18 @@ function renderShadow() {
   const tx = 2 * SH.R / size, a = Math.round(headPos.dot(SH.rx) / tx) * tx, b = Math.round(headPos.dot(SH.ru) / tx) * tx;   // follow the player in whole texel steps so edges do not crawl
   c.position.copy(SH.rx).multiplyScalar(a).addScaledVector(SH.ru, b).addScaledVector(SUN_FIELD, headPos.dot(SUN_FIELD) + 260); c.updateMatrixWorld(); c.matrixWorldInverse.copy(c.matrixWorld).invert();
   U.uShM.value.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse);
-  const m = U.uMode.value, ev = edgeMat.visible, xr = renderer.xr.enabled, hid = [sky, grass, rig, overlays, ...SH.skip].filter(o => o && o.visible);
+  const m = U.uMode.value, ev = edgeMat.visible, xr = renderer.xr.enabled, hid = [sky, grass, rig, overlays, farGrp, ...SH.skip].filter(o => o && o.visible);
   hid.forEach(o => { o.visible = false; }); U.uMode.value = 9; edgeMat.visible = false; const dt = U.uSh.value; U.uSh.value = null;   // the depth picture cannot be read while it is being drawn
   selfShow(true); renderer.xr.enabled = false; renderer.setRenderTarget(SH.rt); renderer.clear(); renderer.render(scene, c); renderer.setRenderTarget(null); renderer.xr.enabled = xr; selfShow(false);   // your own shadow falls on the ground
   U.uSh.value = dt; U.uMode.value = m; edgeMat.visible = ev; hid.forEach(o => { o.visible = true; });
 }
 function renderDrone(d) {
   const m = U.uMode.value, ev = edgeMat.visible, xr = renderer.xr.enabled;
-  fxVH(d.rt.height); U.uMode.value = d.mode; edgeMat.visible = false; hud.visible = false; overlays.visible = false; droneMarks.visible = true; sky.visible = false; laser.visible = false; grass.visible = false;
+  fxVH(d.rt.height); U.uMode.value = d.mode; edgeMat.visible = false; hud.visible = false; overlays.visible = false; droneMarks.visible = true; sky.visible = false; laser.visible = false; grass.visible = false; farGrp.visible = false;
   fleet.forEach(o => { o.mesh.visible = o !== d; }); ents.forEach(e => { e.dm.visible = Math.hypot(e.x - d.cx, e.z - d.cz) < d.fp && (!e.ug || e.tracked); });
   const old = bg.getHex(); bg.set(0x4c4c4c);
   selfShow(true); renderer.xr.enabled = false; renderer.setRenderTarget(d.rt); renderer.render(scene, d.cam); renderer.setRenderTarget(null); selfShow(false); renderer.xr.enabled = xr;
-  fxVH(0); bg.setHex(old); U.uMode.value = m; edgeMat.visible = ev; hud.visible = true; overlays.visible = true; droneMarks.visible = false; sky.visible = true; grass.visible = true; laser.visible = lasing; fleet.forEach(o => { o.mesh.visible = true; });
+  fxVH(0); bg.setHex(old); U.uMode.value = m; edgeMat.visible = ev; hud.visible = true; overlays.visible = true; droneMarks.visible = false; sky.visible = true; grass.visible = true; farGrp.visible = true; laser.visible = lasing; fleet.forEach(o => { o.mesh.visible = true; });
 }
 
 /* ───────────── main loop ───────────── */
@@ -3513,6 +3637,8 @@ let last = 0, frame = 0, fpsAvg = 60, qLevel = 0, qTimer = 0, feedEvery = 3;
 function applyQuality() { // steps down once if the frame rate stays low: less grass, lower resolution, slower drone feeds
   grass.geometry.instanceCount = Math.round((inXR ? 4500 : isTouch ? 6000 : 12000) * [1, 0.6, 0.35, 0.15][qLevel]);
   if (!inXR) renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [2, 1.5, 1, 1][qLevel])); feedEvery = [3, 4, 6, 8][qLevel];
+  U.uQ.value = qLevel >= 2 ? 0 : 1; if (motes) motes.visible = qLevel < 3;   // when the frame rate stays low: drop the close-up ground detail, then the dust
+  if (inXR) try { const bl = renderer.xr.getSession().renderState.baseLayer; if (bl && 'fixedFoveation' in bl) bl.fixedFoveation = qLevel >= 1 ? 1 : 0.6; } catch (e) { /* not supported here */ }
 }
 function adapt(dt) { if (cfg.gfx !== 'auto') return; fpsAvg += (1 / dt - fpsAvg) * 0.04; qTimer += dt; if (qTimer > 4 && fpsAvg < 40 && qLevel < 3) { qLevel++; qTimer = 0; applyQuality(); LOG.ev('system', 'quality_step', { level: qLevel, fps: Math.round(fpsAvg) }); } }
 function loop(ms) {
@@ -3557,7 +3683,8 @@ function loop(ms) {
 /* ───────────── start-up, VR entry ───────────── */
 function resize() { if (inXR) return; camera.aspect = window.innerWidth / window.innerHeight; camera.fov = camera.aspect < 1 ? 92 : 70; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); layoutHUD(); attachTool(); }
 addEventListener('resize', resize);
-renderer.xr.addEventListener('sessionstart', () => { inXR = true; if (LOG.S) LOG.S.xr = true; LOG.ev('system', 'headset_on', { hands: !!(renderer.xr.getSession() && renderer.xr.getSession().inputSources.some(s => s.hand)) }); applyQuality(); camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0); pitch = 0; attachTool(); layoutHUD(); setState(state); sprites.forEach(f => f()); if (result) drawEnd(); });
+renderer.xr.addEventListener('sessionstart', () => { inXR = true; try { const bl = renderer.xr.getSession().renderState.baseLayer; if (bl && 'fixedFoveation' in bl) bl.fixedFoveation = 0.6; } catch (e) { /* not supported here */ }   // the headset renders the edge of the view more coarsely, which pays for the richer scene
+  if (LOG.S) LOG.S.xr = true; LOG.ev('system', 'headset_on', { hands: !!(renderer.xr.getSession() && renderer.xr.getSession().inputSources.some(s => s.hand)) }); applyQuality(); camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0); pitch = 0; attachTool(); layoutHUD(); setState(state); sprites.forEach(f => f()); if (result) drawEnd(); });
 renderer.xr.addEventListener('sessionend', () => { inXR = false; menuFix = false; XRF.done = false; LOG.ev('system', 'headset_off'); if (state === 'debrief' && LOG.S && LOG.S.A) setTimeout(() => showReport(LOG.S), 300); applyQuality(); rightCtrl = null; attachTool(); camera.position.set(0, EYE, 0); resize(); setState(state); sprites.forEach(f => f()); if (state === 'menu') $('start').hidden = false; });
 cv.addEventListener('click', () => { if (state === 'debrief') wantConfirm = true; });
 
