@@ -137,7 +137,7 @@ button.sm{padding:.25rem .6rem;font-size:.78rem}
 <body>
 <div id="start" class="veil">
   <div class="card">
-    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 12 · VR buttons</small></h1>
+    <h1><span>Operator Robotic Control Apparatus · head-mounted display (HMD) recon sim, first playable</span>ORCA HMD <small style="font-size:.4em;color:#ffb81f">build 13 · VR buttons</small></h1>
     <p class="lede">The light is going. Walk to overwatch, use two drones to see ahead, change sensors as it gets dark, and mark every hostile in the village before they see you. Hidden bombs (IEDs) lie on the roads and trails. Then walk out.</p>
     <div class="row">
       <button id="btnVR" disabled>Enter VR</button>
@@ -2489,6 +2489,17 @@ function textSprite(text, scale, color = '#e6f1f2') {
     const w = x.measureText(text).width + 28; x.fillStyle = 'rgba(40,48,54,.78)'; x.fillRect(160 - w / 2, 8, w, 48); x.fillStyle = color; x.fillText(text, 160, 33); t.needsUpdate = true; };
   draw(); sprites.push(draw); return s;
 }
+// where each HUD item sits in the headset, when you have moved it: [x, y] in metres on the HUD plane (1.2 m ahead); the strip keeps only its height
+let HP = { map: null, feed: null, stat: null, tape: null }, hudEdit = false, hudGrab = null, tapeEl = 0.26;
+try { const v = JSON.parse(localStorage.getItem('orca.hudPos') || 'null'); if (v && typeof v === 'object') for (const k of ['map', 'feed', 'stat']) if (Array.isArray(v[k]) && v[k].length === 2 && v[k].every(Number.isFinite)) HP[k] = v[k]; if (v && Number.isFinite(v.tape)) HP.tape = v.tape; } catch (e) { /* default places */ }
+function hudSave() { try { localStorage.setItem('orca.hudPos', JSON.stringify(HP)); } catch (e) { /* not saved, still used */ } LOG.ev('system', 'hud_layout', { map: HP.map, feed: HP.feed, stat: HP.stat, tape: HP.tape }); }
+function hudEditSet(on) { // edit mode in the briefing room: the field HUD appears so you can drag its parts
+  hudEdit = !!on && inXR && state === 'brief'; hudGrab = null;
+  const show = hudEdit; mapMesh.visible = statMesh.visible = tapeMesh.visible = dronePanel.visible = show; if (!show) hudCur.visible = false;
+  if (show) { try { drawTape(); drawMap(); drawStatus(); drawDroneHeader(); } catch (e) { /* drawn once the field starts */ } planSay('HUD edit: point at the strip, map, feed or text, hold the trigger (or pinch) and drag it. Press Done when finished.'); }
+  layoutHUD(); sprites.forEach(f => f()); beep(on ? 880 : 600, 0.04);
+}
+function hudBtnPress(i) { if (i < 2) hudSize(i ? 0.05 : -0.05); else if (i === 2) hudEditSet(!hudEdit); else { HP = { map: null, feed: null, stat: null, tape: null }; hudSave(); layoutHUD(); beep(420, 0.05); planSay('HUD items are back in their default places.'); } }
 let HS = 0.8; try { const v = parseFloat(localStorage.getItem('orca.hudScale')); if (v >= 0.4 && v <= 1.2) HS = v; } catch (e) { /* default size */ }   // HUD size in the headset, set with the HUD - / + buttons in the briefing room
 let briefPanel, tableUpdate, deployBtn, planBar, hudBtns = [], planDraw = () => {};
 function hudSize(d) { HS = Math.round(clamp(HS + d, 0.4, 1.2) * 20) / 20; try { localStorage.setItem('orca.hudScale', String(HS)); } catch (e) { /* not saved */ } layoutHUD(); sprites.forEach(f => f()); beep(d > 0 ? 880 : 600, 0.04); LOG.ev('system', 'hud_scale', { to: HS }); }
@@ -2627,19 +2638,21 @@ const mapGrp = new T.Group(), tblU = { uR: { value: TBL.R }, uYX: { value: 2 } }
       x.textAlign = 'left'; x.fillStyle = '#cfe0e2'; x.font = `400 23px ${FONT}`; const m = planMsgNow(true), w = m.split(' '); let l1 = '', l2 = ''; for (const s of w) { if (!l2 && x.measureText(l1 + s).width < 740) l1 += s + ' '; else l2 += s + ' '; } x.fillText(l1, 14, 132); x.fillText(l2, 14, 168); pt.needsUpdate = true; };
     sprites.push(() => planBar.userData.draw()); }
   { // HUD size in the headset: two buttons under Deploy, with the frame shown while you set it
-    const mk = (label, x) => { const cc = document.createElement('canvas'); cc.width = 192; cc.height = 96; const tt = new T.CanvasTexture(cc); tt.minFilter = T.LinearFilter; tt.generateMipmaps = false;
-      const m = new T.Mesh(new T.PlaneGeometry(0.15, 0.075), new T.MeshBasicMaterial({ map: tt })); m.position.set(x, base + 0.37, 1.15); m.rotation.set(-0.35, 0, 0); m.visible = false; briefGrp.add(m);
+    const mk = (label, x, row = 0) => { const cc = document.createElement('canvas'); cc.width = 192; cc.height = 96; const tt = new T.CanvasTexture(cc); tt.minFilter = T.LinearFilter; tt.generateMipmaps = false;
+      const m = new T.Mesh(new T.PlaneGeometry(0.15, 0.075), new T.MeshBasicMaterial({ map: tt })); m.position.set(x, base + 0.37 + row * 0.095, 1.15 - row * 0.035); m.rotation.set(-0.35, 0, 0); m.visible = false; briefGrp.add(m);
       const d = () => { const q = cc.getContext('2d'); q.fillStyle = '#0d2a33'; q.fillRect(0, 0, 192, 96); q.strokeStyle = '#8fe3ff'; q.lineWidth = 4; q.strokeRect(2, 2, 188, 92); q.fillStyle = '#e6f1f2'; q.font = `600 34px ${FONT}`; q.textAlign = 'center'; q.textBaseline = 'middle';
-        q.fillText(label === '+' ? 'HUD +' : 'HUD −', 96, 36); q.font = `500 22px ${FONT}`; q.fillStyle = '#8fe3ff'; q.fillText(Math.round(HS * 100) + '%', 96, 72); tt.needsUpdate = true; };
+        if (label === 'edit' && hudEdit) { q.fillStyle = '#ffb81f'; q.fillRect(4, 4, 184, 88); q.fillStyle = '#04141b'; }
+        q.fillText(label === '+' ? 'HUD +' : label === '-' ? 'HUD −' : label === 'edit' ? (hudEdit ? 'Done' : 'Edit HUD') : 'Reset', 96, 36); q.font = `500 22px ${FONT}`; if (!(label === 'edit' && hudEdit)) q.fillStyle = '#8fe3ff';
+        q.fillText(label === 'edit' ? (hudEdit ? 'drag items' : 'move items') : label === 'reset' ? 'HUD places' : Math.round(HS * 100) + '%', 96, 72); tt.needsUpdate = true; };
       d(); sprites.push(d); return m; };
-    hudBtns = [mk('-', 0.53), mk('+', 0.71)];
+    hudBtns = [mk('-', 0.53), mk('+', 0.71), mk('edit', 0.53, 1), mk('reset', 0.71, 1)];
   }
   // wall panel
   const c = document.createElement('canvas'); c.width = 960; c.height = 540; const t = new T.CanvasTexture(c); t.minFilter = T.LinearFilter; t.generateMipmaps = false;
   briefPanel = new T.Mesh(new T.PlaneGeometry(1.9, 1.07), new T.MeshBasicMaterial({ map: t, transparent: true })); briefPanel.position.set(0, 1.78, -1.95); briefGrp.add(briefPanel);
   const draw = () => { const x = c.getContext('2d'); x.clearRect(0, 0, 960, 540); x.fillStyle = 'rgba(8,30,38,.9)'; x.fillRect(0, 0, 960, 540);
     x.fillStyle = '#ffb81f'; x.fillRect(0, 0, 8, 540); x.fillStyle = '#e6f1f2'; x.textBaseline = 'alphabetic';
-    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 12', 300, 96);
+    x.font = `600 62px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillText('ORCA HMD', 48, 96); x.font = `600 30px "Barlow Condensed","Arial Narrow",Arial,sans-serif`; x.fillStyle = '#ffb81f'; x.fillText('build 13', 300, 96);
     x.font = `400 31px ${FONT}`; x.fillStyle = '#cfe0e2';
     const lines = ['1.  Follow the white route north to Overwatch.', '2.  MagniTude sweeps the village, Magni-X flies ahead.', '     Fuse both feeds to see everything they see.',
       '3.  Aim at a hostile and press Mark. Never mark cyan.', '4.  IEDs (hidden bombs) lie on roads and trails.', '     Keep 2 m away. Sensors and drones show them.', '5.  Stay out of their sight, then walk to Exfil.'];
@@ -2716,11 +2729,11 @@ const EE = { arDiag: 70, arW: 16, arH: 10, nvFov: 84 };
 const XRF = { done: false, L: 0, R: 0, U: 0, D: 0 };
 function xrFitCheck() {
   if (!inXR || XRF.done) return; const cams = renderer.xr.getCamera(camera).cameras; if (!cams || cams.length < 1) return;
-  let L = -9, R = 9, U = 9, D = -9;
-  for (const c of cams) { const e = c.projectionMatrix.elements; if (!e[0] || !e[5]) return;
+  let L = -9, R = 9, U = 9, D = -9, Lo = 0, Ro = 0;
+  for (const c of cams) { const e = c.projectionMatrix.elements; if (!e[0] || !e[5]) return; Ro = Math.max(Ro, (1 + e[8]) / e[0]); Lo = Math.min(Lo, (e[8] - 1) / e[0]);
     R = Math.min(R, (1 + e[8]) / e[0]); L = Math.max(L, (e[8] - 1) / e[0]); U = Math.min(U, (1 + e[9]) / e[5]); D = Math.max(D, (e[9] - 1) / e[5]); }
   if (!(R > 0.2 && -L > 0.2 && U > 0.2 && -D > 0.2)) return;
-  Object.assign(XRF, { done: true, L: -Math.atan(-L) / DEG, R: Math.atan(R) / DEG, U: Math.atan(U) / DEG, D: -Math.atan(-D) / DEG, tw: Math.min(R, -L), th: Math.min(U, -D) });
+  Object.assign(XRF, { done: true, L: -Math.atan(-L) / DEG, R: Math.atan(R) / DEG, U: Math.atan(U) / DEG, D: -Math.atan(-D) / DEG, tw: Math.min(R, -L), th: Math.min(U, -D), out: Math.atan(Math.min(Ro, -Lo)) / DEG });
   LOG.ev('system', 'xr_fov', { left: Math.round(XRF.L), right: Math.round(XRF.R), up: Math.round(XRF.U), down: Math.round(XRF.D), eyes: cams.length });
   layoutHUD(); sprites.forEach(f => f());
 }
@@ -2740,7 +2753,7 @@ function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = 
 function hudMesh(tex, parent = hud) { const m = new T.Mesh(unit, new T.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false })); m.renderOrder = 20; m.frustumCulled = false; parent.add(m); return m; }
 const mapC = mkCanvas(384, 384), tapeC = mkCanvas(1024, 64), dhC = mkCanvas(320, 110), statC = mkCanvas(640, 110), radC = mkCanvas(256, 256), endC = mkCanvas(720, 400);
 const mapMesh = hudMesh(mapC.tex), statMesh = hudMesh(statC.tex), radMesh = hudMesh(radC.tex), endMesh = hudMesh(endC.tex);
-const tapeMesh = new T.Mesh(new T.BufferGeometry(), new T.MeshBasicMaterial({ map: tapeC.tex, transparent: true, depthTest: false, depthWrite: false, side: T.DoubleSide })); tapeMesh.renderOrder = 20; tapeMesh.frustumCulled = false; hud.add(tapeMesh);
+const tapeMesh = new T.Mesh(new T.BufferGeometry(), new T.MeshBasicMaterial({ map: tapeC.tex, transparent: true, depthTest: false, depthWrite: false, side: T.DoubleSide })); tapeMesh.renderOrder = 24; tapeMesh.frustumCulled = false; hud.add(tapeMesh);   // drawn last, so nothing covers the strip
 const dronePanel = new T.Group(); hud.add(dronePanel);
 const dhMesh = hudMesh(dhC.tex, dronePanel), feedMesh = new T.Mesh(unit, new T.MeshBasicMaterial({ map: fleet[0].rt.texture, depthTest: false, depthWrite: false, transparent: true })); feedMesh.renderOrder = 20; feedMesh.frustumCulled = false; dronePanel.add(feedMesh);
 dhMesh.scale.set(1, 110 / 320, 1); dhMesh.position.y = 0.375 + 0.172; feedMesh.scale.set(1, 0.75, 1);
@@ -2799,7 +2812,7 @@ function layoutHUD() {
   let hh, hw;
   if (inXR) { const td = Math.tan(EE.arDiag / 2 * DEG) / Math.hypot(EE.arW, EE.arH); hw = HD * td * EE.arW; hh = HD * td * EE.arH;
     if (XRF.done) { hw = Math.min(hw, HD * XRF.tw * 0.72); hh = Math.min(hh, HD * XRF.th * 0.72); } hw *= HS; hh *= HS; } else { hh = HD * Math.tan(camera.fov * DEG / 2); hw = hh * camera.aspect; }
-  const sc = inXR ? 0.46 * Math.min(1, HS + 0.15) : Math.min(hh, hw * 0.72); TAPE = inXR ? Math.round(Math.atan(hw / HD) / DEG) - 2 : 70;
+  const sc = inXR ? 0.46 * Math.min(1, HS + 0.15) : Math.min(hh, hw * 0.72); TAPE = inXR ? (XRF.done ? clamp(Math.round(XRF.out) - 4, 35, 62) : 46) : 70;   // in the headset the strip runs the whole width you can see
   mapMesh.scale.set(0.62 * sc, 0.62 * sc, 1); mapMesh.position.set(-hw + 0.4 * sc, -hh + 0.38 * sc, -HD); mapMesh.rotation.set(-0.42, 0.22, 0);
   const pad = (isTouch && !inXR) ? 2 * hw * Math.min(0.36, 150 / window.innerWidth) : 0, tall = isTouch && !inXR && camera.aspect < 1;
   dronePanel.scale.setScalar(0.56 * sc); dronePanel.position.set(hw - 0.37 * sc - pad, -hh + 0.31 * sc, -HD); dronePanel.rotation.set(0, -0.3, 0);
@@ -2807,6 +2820,8 @@ function layoutHUD() {
   if (inXR) {   // headset: a tactical HMD frame, everything inside the central field of view and clear of the hands and the weapon below
     mapMesh.position.set(-hw + 0.36 * sc, -0.15, -HD); mapMesh.rotation.set(-0.12, 0.3, 0);
     dronePanel.position.set(hw - 0.33 * sc, -0.13, -HD); dronePanel.rotation.set(0, -0.3, 0);
+    if (HP.map) { mapMesh.position.set(HP.map[0], HP.map[1], -HD); mapMesh.rotation.set(-0.12, Math.atan2(-HP.map[0], HD), 0); }   // places you chose in Edit HUD; each panel turns to face you
+    if (HP.feed) { dronePanel.position.set(HP.feed[0], HP.feed[1], -HD); dronePanel.rotation.set(0, Math.atan2(-HP.feed[0], HD), 0); }
     const a = 0.07, p = []; for (const [sx, sy] of [[-1, 1], [1, 1], [1, -1], [-1, -1]]) { const x = sx * hw, y = sy * hh; p.push(x, y, -HD, x - sx * a, y, -HD, x, y, -HD, x, y - sy * a, -HD); }
     eeFrame.geometry.dispose(); eeFrame.geometry = new T.BufferGeometry(); eeFrame.geometry.setAttribute('position', new T.Float32BufferAttribute(p, 3));
   }   // upright phone: the feed sits above the minimap, clear of the buttons
@@ -2816,14 +2831,15 @@ function layoutHUD() {
   reticle.scale.setScalar(sc / 0.42); markArc.scale.setScalar(sc / 0.42);
   const cw = inXR ? 1.12 : Math.min(2 * hw * 0.9, 2 * hh * 0.88 * 16 / 9); ctrlMesh.scale.set(cw, cw * 9 / 16, 1); ctrlMesh.position.set(0, 0, -HD - 0.01); ctrlInfo.scale.set(cw, cw * 48 / 1024, 1); ctrlInfo.position.set(0, -cw * 9 / 32 + cw * 24 / 1024, -HD);
   // heading tape: a ring at constant elevation, so a marker sits directly above the thing it points to
-  const el = Math.atan((hh - (inXR ? 0.13 : 0.2) * sc) / HD), dl = Math.atan(0.075 * sc / HD), N = 64, pos = [], uv = [], idx = [];
+  if (inXR && HP.stat) statMesh.position.set(HP.stat[0], HP.stat[1], -HD);
+  const el = inXR && HP.tape !== null ? HP.tape : Math.atan((hh - (inXR ? 0.13 : 0.2) * sc) / HD), dl = Math.atan(0.075 * sc / HD), N = 64, pos = [], uv = [], idx = [];
   for (let i = 0; i <= N; i++) {
     const a = (-TAPE + 2 * TAPE * i / N) * DEG;
     for (const s of [1, -1]) { const e = el + s * dl; pos.push(HD * Math.cos(e) * Math.sin(a), HD * Math.sin(e), -HD * Math.cos(e) * Math.cos(a)); uv.push(i / N, s > 0 ? 1 : 0); }
     if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
   }
   const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
-  tapeMesh.geometry.dispose(); tapeMesh.geometry = g;
+  tapeMesh.geometry.dispose(); tapeMesh.geometry = g; tapeEl = el;
   // rear view strip, curved like the tape and hung just under it, with a bracket line beneath
   statY0 = statMesh.position.y;
   {
@@ -2894,6 +2910,7 @@ function setState(s) {
   $('deploy').hidden = !(s === 'brief' && !inXR); $('plan').hidden = $('deploy').hidden; WH.open = false; planBar.visible = inXR && s === 'brief'; if (s !== 'brief') for (const c of [leftCtrl, rightCtrl]) if (c && c.userData.ray) c.userData.ray.visible = false; if (s === 'brief') { planDraw(); planUi(); } $('touch').hidden = !(s === 'field' && isTouch && !inXR);
   if (brief) bg.set(0x1b2025);
   if (amb && s !== 'field') amb.master.gain.setTargetAtTime(0, actx.currentTime, 0.3);
+  if (hudEdit) { hudEdit = false; hudGrab = null; hudCur.visible = false; sprites.forEach(f => f()); }
   if (was !== s) { LOG.ev('session', 'state', { from: was, to: s }); if (s !== 'debrief') $('report').hidden = true; }
 }
 let ugClear = false, ugIn = false, ugEarly = 0, ugWarnT = -1e9, ugEarlyT = -1e9;
@@ -3098,11 +3115,37 @@ function xrTrig(c) { // a trigger in the briefing room: a plan button, Deploy, o
   planRayFrom(c); const hb = _rc.intersectObject(planBar, false)[0], bi = hb ? planBarUV(hb.uv) : -1;   // the bar only catches the ray where a button is, so the map behind it stays pointable
   if (bi >= 0) { planButton(bi); return; }
   if (_rc.intersectObject(deployBtn, false)[0]) { wantConfirm = true; return; }
-  for (let i = 0; i < hudBtns.length; i++) if (_rc.intersectObject(hudBtns[i], false)[0]) { hudSize(i ? 0.05 : -0.05); return; }
+  for (let i = 0; i < hudBtns.length; i++) if (_rc.intersectObject(hudBtns[i], false)[0]) { hudBtnPress(i); return; }
+  if (hudEdit) return;   // while editing the HUD the trigger grabs HUD items, not the map
   const g = planHit(_rc); if (g) { planAdd(g[0], g[1]); return; }
   wantConfirm = true;
 }
+const _eM = new T.Matrix4(), _eO = V(0, 0, 0), _eD = V(0, 0, 0), _eQ = V(0, 0, 0);
+const hudCur = (() => { const m = new T.Mesh(new T.RingGeometry(0.011, 0.018, 24), new T.MeshBasicMaterial({ color: 0x8fe3ff, transparent: true, depthTest: false, depthWrite: false })); m.renderOrder = 26; m.frustumCulled = false; m.visible = false; hud.add(m); return m; })();
+function hudPoint(o, d) { // where a ray meets the HUD plane, in HUD coordinates
+  _eM.copy((inXR ? renderer.xr.getCamera(camera) : camera).matrixWorld).invert(); _eO.copy(o).applyMatrix4(_eM); _eD.copy(d).transformDirection(_eM);
+  if (_eD.z > -0.05) return null; const t = (-HD - _eO.z) / _eD.z; return t > 0 ? [_eO.x + _eD.x * t, _eO.y + _eD.y * t] : null;
+}
+const hudItem = k => k === 'map' ? mapMesh : k === 'feed' ? dronePanel : statMesh;
+function hudPick(x, y) { let best = null, bd = 0.19;
+  for (const k of ['map', 'feed', 'stat']) { const m = hudItem(k), d = k === 'stat' ? Math.hypot((x - m.position.x) * 0.45, (y - m.position.y) * 2.2) : Math.hypot(x - m.position.x, y - m.position.y); if (d < bd) { bd = d; best = k; } }
+  return best || (Math.abs(y - HD * Math.tan(tapeEl)) < 0.1 ? 'tape' : null); }
+function hudEditFrame() { // drag HUD items: hold the trigger on one, or pinch where you see it
+  if (!hudEdit || !inXR || state !== 'brief') { hudCur.visible = false; return; }
+  let pt = null, down = false, src = null;
+  for (const [c, held, sd] of [[rightCtrl, prevBtn.rTrig, 'r'], [leftCtrl, prevBtn.lTrig, 'l']]) { if (!c || !c.userData.pad || (hudGrab && hudGrab.src !== sd)) continue;
+    planRayFrom(c); const q = hudPoint(_rc.ray.origin, _rc.ray.direction); if (!q) continue; if (!pt || held) { pt = q; down = !!held; src = sd; } if (held) break; }
+  if (!pt) for (const h of hands) { if (!h.seen || !h.p['index-finger-tip'] || !h.p['thumb-tip']) continue; const sd = 'h' + h.side; if (hudGrab && hudGrab.src !== sd) continue;
+    _eQ.addVectors(h.p['index-finger-tip'], h.p['thumb-tip']).multiplyScalar(0.5).sub(headPos).normalize(); const q = hudPoint(headPos, _eQ); if (!q) continue; if (!pt || h.pinch) { pt = q; down = h.pinch; src = sd; } if (h.pinch) break; }
+  hudCur.visible = !!pt; if (pt) hudCur.position.set(pt[0], pt[1], -HD);
+  if (!pt || !down) { if (hudGrab) { hudSave(); hudGrab = null; beep(600, 0.03); } hudCur.material.color.setHex(pt && hudPick(pt[0], pt[1]) ? 0xffb81f : 0x8fe3ff); return; }
+  if (!hudGrab) { const k = hudPick(pt[0], pt[1]); if (!k) return; const m = k === 'tape' ? null : hudItem(k); hudGrab = { k, src, dx: m ? m.position.x - pt[0] : 0, dy: (m ? m.position.y : HD * Math.tan(tapeEl)) - pt[1] }; beep(880, 0.03); }
+  const x = clamp(pt[0] + hudGrab.dx, -1.5, 1.5), y = clamp(pt[1] + hudGrab.dy, -1.1, 1.1);
+  if (hudGrab.k === 'tape') HP.tape = Math.atan(y / HD); else HP[hudGrab.k] = [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000];
+  layoutHUD();
+}
 function planXRFrame(dt) {
+  hudEditFrame();
   if (!inXR) return; PLAN.cool -= dt;
   if (wantDrone) planSel((PLAN.sel + 1) % 3); if (wantCtrl) planUndo();
   for (const c of [leftCtrl, rightCtrl]) { // the pointing ray stops where it meets the table or a button
@@ -3110,7 +3153,7 @@ function planXRFrame(dt) {
     planRayFrom(c); const pb = _rc.intersectObject(planBar, false)[0], hb = (pb && planBarUV(pb.uv) >= 0 ? pb : null) || _rc.intersectObject(deployBtn, false)[0], hr = !hb && TBL.relief ? _rc.intersectObject(TBL.relief, false)[0] : null;
     ln.scale.z = hb ? hb.distance : hr ? hr.distance : 1.5;
   }
-  if (PLAN.cool > 0 || hands.some(h => h.seen && h.pinch)) return;
+  if (hudEdit || PLAN.cool > 0 || hands.some(h => h.seen && h.pinch)) return;
   for (const h of hands) { // with hand tracking, point and touch: a button on the bar, or the map itself
     const tip = h.seen && h.pointP && h.p['index-finger-tip']; if (!tip) continue;
     _pv.copy(tip); planBar.worldToLocal(_pv);
@@ -3206,13 +3249,13 @@ function briefInput(dt) {
   if (rr) { TBL.rot += rr * dt * 1.3; TBL.dirty = true; } if (zr) TBL.tz = clamp(TBL.tz * Math.exp(zr * dt * 1.4), 1, 6);
   if (!inXR) { pitch = clamp(pitch + ((keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0)) * dt * 0.8, -1.2, -0.1); rig.position.z = Math.min(3.4, Math.max(1.62, 1.32 / (Math.tan(camera.fov * DEG / 2) * camera.aspect))) - 0.3 * smooth(1, 6, TBL.zoom); }
   else { // hand tracking: pinch and drag to slide the map; pinch with both hands to stretch and turn it
-    const ph = hands.filter(h => h.seen && h.pinch && h.p['index-finger-tip']), q = ph.map(h => h.p['index-finger-tip']);
+    const ph = hudEdit ? [] : hands.filter(h => h.seen && h.pinch && h.p['index-finger-tip']), q = ph.map(h => h.p['index-finger-tip']);
     if (ph.length === 2) { const d = Math.hypot(q[1].x - q[0].x, q[1].z - q[0].z), a = Math.atan2(q[1].x - q[0].x, q[1].z - q[0].z), mx = (q[0].x + q[1].x) / 2, mz = (q[0].z + q[1].z) / 2;
       if (bPinch && bPinch.n === 2) { TBL.tz = TBL.zoom = clamp(TBL.zoom * d / Math.max(0.02, bPinch.d), 1, 6); TBL.rot += wrapPi(a - bPinch.a); panTable(mx - bPinch.x, mz - bPinch.z); }
       bPinch = { n: 2, d, a, x: mx, z: mz }; }
     else if (ph.length === 1) { if (bPinch && bPinch.n === 1 && bPinch.h === ph[0]) panTable(q[0].x - bPinch.x, q[0].z - bPinch.z); bPinch = { n: 1, h: ph[0], x: q[0].x, z: q[0].z }; }
     else bPinch = null;
-    for (let i = 0; i < hudBtns.length; i++) { hudBtns[i].getWorldPosition(tV); for (const h of hands) if (h.seen && h.p['index-finger-tip'] && bPoke <= 0 && h.p['index-finger-tip'].distanceTo(tV) < 0.05) { bPoke = 0.6; hudSize(i ? 0.05 : -0.05); } }
+    for (let i = 0; i < hudBtns.length; i++) { hudBtns[i].getWorldPosition(tV); for (const h of hands) if (h.seen && h.p['index-finger-tip'] && bPoke <= 0 && h.p['index-finger-tip'].distanceTo(tV) < 0.05) { bPoke = 0.6; hudBtnPress(i); } }
     bPoke -= dt; deployBtn.getWorldPosition(tV); for (const h of hands) if (h.seen && h.p['index-finger-tip'] && bPoke <= 0 && h.p['index-finger-tip'].distanceTo(tV) < 0.12) { bPoke = 1.5; wantConfirm = true; }
   }
   planXRFrame(dt);
